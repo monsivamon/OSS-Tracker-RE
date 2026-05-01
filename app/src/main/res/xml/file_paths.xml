@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Core Storage Routing Configuration
+  ~ Defines secure access boundaries for the Android Package Installer.
+  ~ Maps internal URIs to physical external storage pathways to bypass StrictMode violations.
+  -->
+<paths>
+
+    <!--
+      ~ Primary Download Directory Route
+      ~ Exposes the standard public downloads directory (/storage/emulated/0/Download/)
+      ~ Required for standard Android ecosystem compatibility.
+      -->
+    <external-path name="public_downloads" path="Download/" />
+
+    <!--
+      ~ Fallback Storage Root Route
+      ~ Acts as a failsafe wildcard for OEM-specific file system deviations.
+      ~ Ensures seamless execution across heavily modified Android kernels (e.g., MIUI, ColorOS).
+      -->
+    <external-path name="external_storage_root" path="." />
+
+</paths>

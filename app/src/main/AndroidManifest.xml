@@ -1,10 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+<!--
+  ~ OSS Tracker RE — Android Manifest
+  ~
+  ~ All declared permissions and components are the minimum required to support
+  ~ the core functionality: fetching repository metadata, downloading APK files
+  ~ in a reliable foreground service, and offering the resulting APK for installation.
+  -->
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Network access for GitHub/GitLab API calls and APK downloads -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Foreground service support (API 28+) and the specific DATA_SYNC type (API 29+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- Runtime permission required on Android 13+ to display any notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Allows the app to trigger the system package installer for downloaded APKs -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
+        android:name=".OSSApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -12,8 +31,9 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Androidossreleasetracker"
-        tools:targetApi="31">
+        android:theme="@style/Theme.Androidossreleasetracker">
+
+        <!-- Single-activity launcher -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -26,6 +46,24 @@
                 android:name="android.app.lib_name"
                 android:value="" />
         </activity>
+
+        <!-- Foreground service that executes APK downloads and survives background restrictions -->
+        <service
+            android:name=".ui.ApkDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- FileProvider that grants the system installer temporary access to the downloaded APK -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

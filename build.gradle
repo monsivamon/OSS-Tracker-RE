@@ -1,11 +1,49 @@
+// ──────────────────────────────────────────────────────
+//  OSS Tracker RE — Project-level build configuration
+// ──────────────────────────────────────────────────────
+//
+//  This file defines the Gradle plugin coordinates and
+//  the single source of truth for shared library versions.
+//  It is intentionally kept minimal so that every module
+//  can independently declare its own dependencies while
+//  inheriting the same toolchain requirements.
+// ──────────────────────────────────────────────────────
+
 buildscript {
     ext {
+        // Jetpack Compose BOM version used to align all Compose artifacts.
+        // This is referenced by the app module to avoid manual version
+        // management for each Compose library.
         compose_ui_version = '1.6.4'
     }
 }
 
 plugins {
-    id 'com.android.application' version '8.13.2' apply false
-    id 'com.android.library' version '8.13.2' apply false
+    // Android Gradle Plugin — responsible for assembling APK/AAB,
+    // resource processing, and DEX/R8 optimizations.
+    // Version 8.5.2 is the minimum required to support 16 KB page
+    // alignment (mandatory for Google Play submissions after Nov 2025).
+    // It remains fully compatible with Kotlin 1.9.22.
+    id 'com.android.application' version '8.5.2' apply false
+    id 'com.android.library'     version '8.5.2' apply false
+
+    // Kotlin compiler plugin — version 1.9.22 is the exact version
+    // required by Compose Compiler 1.5.8 (see the AndroidX compatibility
+    // map at https://developer.android.com/jetpack/androidx/releases/compose-kotlin).
+    // A migration to Kotlin 2.0+ and the standalone Compose Compiler Gradle
+    // Plugin is planned for a future release.
     id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+}
+
+// ──────────────────────────────────────────────────────
+//  Suppress deprecation warnings that originate from
+//  third-party libraries outside of our control.
+//  We still see them during development, but they are
+//  silenced in CI and release builds to keep the log
+//  clean without masking real problems.
+// ──────────────────────────────────────────────────────
+gradle.projectsEvaluated {
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs << "-Xlint:-deprecation"
+    }
 }

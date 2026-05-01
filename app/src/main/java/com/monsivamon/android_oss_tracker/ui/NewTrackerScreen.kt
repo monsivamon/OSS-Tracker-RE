@@ -1,18 +1,15 @@
 package com.monsivamon.android_oss_tracker.ui
 
-import android.content.SharedPreferences
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,26 +19,22 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.android.volley.RequestQueue
+import com.monsivamon.android_oss_tracker.OSSApp
 import com.monsivamon.android_oss_tracker.PersistentState
 import com.monsivamon.android_oss_tracker.repo.MetaDataState
 import com.monsivamon.android_oss_tracker.repo.RepoMetaData
 
 /**
  * Displays a preview card for a specific repository URL.
- * Automatically fetches repository metadata upon composition and allows the user
- * to add the repository to their tracked list once a valid release is found.
- *
- * @param repoUrl The target GitHub repository URL.
- * @param requestQueue The Volley RequestQueue for network operations.
- * @param onAdd Callback triggered when the user confirms adding the repository.
+ * Automatically fetches metadata and allows the user to add the repository.
+ * All network operations use the singleton Volley request queue.
  */
 @Composable
 fun TrackerPreview(
     repoUrl: String,
-    requestQueue: RequestQueue,
     onAdd: (String, String) -> Unit
 ) {
+    val requestQueue = remember { OSSApp.requestQueue }
     val metaData = remember { RepoMetaData(repoUrl, requestQueue) }
 
     LaunchedEffect(repoUrl) {
@@ -49,12 +42,11 @@ fun TrackerPreview(
     }
 
     val isValid = remember { mutableStateOf(false) }
-
     if (!isValid.value && metaData.latestVersion.value != null) {
         isValid.value = true
     }
 
-    val fallbackText = when(metaData.state.value) {
+    val fallbackText = when (metaData.state.value) {
         MetaDataState.Unsupported -> "<unsupported>"
         MetaDataState.Loading -> "<loading>"
         MetaDataState.Errored -> "<error>"
@@ -142,17 +134,15 @@ fun TrackerPreview(
 
 /**
  * Provides the user interface for adding a new OSS tracker.
- * Includes text input for the repository URL and a preview section for validation.
- *
- * @param sharedPreferences The SharedPreferences instance for persisting the new tracker.
- * @param requestQueue The Volley RequestQueue for network operations.
+ * Disk writes are deferred to SharedPreferences.Editor.apply() and run asynchronously.
+ * No heavy I/O is executed on the main thread.
  */
 @Composable
-fun NewTrackerScreen(
-    sharedPreferences: SharedPreferences,
-    requestQueue: RequestQueue
-) {
+fun NewTrackerScreen() {
     val ctx = LocalContext.current
+    val sharedPreferences = remember {
+        ctx.getSharedPreferences(PersistentState.STATE_FILENAME, Context.MODE_PRIVATE)
+    }
     val focusManager = LocalFocusManager.current
     val repoInputBox = remember { mutableStateOf("") }
     val isTested = remember { mutableStateOf(false) }
@@ -198,13 +188,14 @@ fun NewTrackerScreen(
         if (isTested.value) {
             TrackerPreview(
                 repoUrl = repoInputBox.value,
-                requestQueue = requestQueue
-            ) { repo, appName ->
-                PersistentState.addTracker(ctx, sharedPreferences, appName, repo)
-                Toast.makeText(ctx, "Added $appName to your trackers", Toast.LENGTH_LONG).show()
-                repoInputBox.value = ""
-                isTested.value = false
-            }
+                onAdd = { repo, appName ->
+                    // PersistentState.addTracker uses SharedPreferences.apply() -> non-blocking
+                    PersistentState.addTracker(ctx, sharedPreferences, appName, repo)
+                    Toast.makeText(ctx, "Added $appName to your trackers", Toast.LENGTH_LONG).show()
+                    repoInputBox.value = ""
+                    isTested.value = false
+                }
+            )
         }
 
         Spacer(modifier = Modifier.weight(1.0f))
