@@ -1,6 +1,7 @@
 package com.monsivamon.android_oss_tracker.ui
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -9,26 +10,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.monsivamon.android_oss_tracker.PersistentState
-import com.monsivamon.android_oss_tracker.repo.AppCache
+import com.monsivamon.android_oss_tracker.MainActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Displays a confirmation dialog before permanently removing every tracked
- * repository from both persistent storage and the in-memory cache.
+ * Presents a confirmation dialog that performs a full factory reset of the
+ * application and then restarts the launcher Activity.
  *
- * The deletion itself is executed on the **main thread** because
- * [PersistentState.removeAllTrackers] internally shows a [Toast].
- * [SharedPreferences] writes use [SharedPreferences.Editor.apply], which is
- * already asynchronous and does not block the UI.
+ * Upon confirmation every persistent file owned by the app is erased, the
+ * process is terminated, and [MainActivity] is re-launched as a fresh task.
  */
 @Composable
 fun RepoDeleteAll() {
     val ctx = LocalContext.current
-    val sharedPreferences = remember {
-        ctx.getSharedPreferences(PersistentState.STATE_FILENAME, Context.MODE_PRIVATE)
-    }
-    val showDeleteAllPopup = remember { mutableStateOf(false) }
+    val showDialog = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Button(
@@ -40,27 +37,28 @@ fun RepoDeleteAll() {
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer
         ),
-        onClick = { showDeleteAllPopup.value = true }
+        onClick = { showDialog.value = true }
     ) {
         Text(
-            text = "Delete All Trackers",
+            text = "Reset & Reboot",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(vertical = 4.dp)
         )
     }
 
-    if (showDeleteAllPopup.value) {
+    if (showDialog.value) {
         AlertDialog(
-            onDismissRequest = { showDeleteAllPopup.value = false },
+            onDismissRequest = { showDialog.value = false },
             title = {
                 Text(
-                    text = "Delete all trackers?",
+                    text = "Reset & Reboot?",
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = "This action cannot be undone. All your saved repository trackers will be permanently removed.",
+                    text = "This will erase all application data and restart the app. " +
+                            "All tracked repositories, download history, and settings will be permanently removed.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -70,25 +68,70 @@ fun RepoDeleteAll() {
                         containerColor = MaterialTheme.colorScheme.error
                     ),
                     onClick = {
-                        // Runs on the main thread so the Toast inside
-                        // removeAllTrackers can access the Looper.
                         scope.launch {
-                            PersistentState.removeAllTrackers(ctx, sharedPreferences)
-                            AppCache.cachedRepos.clear()
-                            showDeleteAllPopup.value = false
+                            // Wipe every byte of persistent data on a background thread
+                            withContext(Dispatchers.IO) {
+                                wipeAllAppData(ctx)
+                            }
+                            // Restart the app into a clean state
+                            val intent = Intent(ctx, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                            }
+                            ctx.startActivity(intent)
+                            // Ensure no residual state lingers in memory
+                            Runtime.getRuntime().exit(0)
                         }
+                        showDialog.value = false
                     }
                 ) {
-                    Text("Delete")
+                    Text("Reboot")
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showDeleteAllPopup.value = false }
+                    onClick = { showDialog.value = false }
                 ) {
                     Text("Cancel")
                 }
             }
         )
+    }
+}
+
+/**
+ * Recursively deletes every file and directory owned by the application.
+ *
+ * The following storage locations are purged:
+ * - Internal storage (databases, shared preferences, files)
+ * - Internal cache
+ * - App-specific external files directory
+ * - App-specific external cache directory
+ *
+ * The result is functionally identical to the user invoking
+ * "Clear storage" from the system Settings app.
+ */
+private fun wipeAllAppData(context: Context) {
+    // Internal storage – contains databases, shared_prefs, etc.
+    val dataDir = context.filesDir.parentFile
+    if (dataDir != null && dataDir.exists()) {
+        dataDir.deleteRecursively()
+    }
+
+    // Internal cache
+    val cacheDir = context.cacheDir
+    if (cacheDir.exists()) {
+        cacheDir.deleteRecursively()
+    }
+
+    // App-specific external files (scoped storage compliant area)
+    val externalFilesDir = context.getExternalFilesDir(null)
+    if (externalFilesDir != null && externalFilesDir.exists()) {
+        externalFilesDir.deleteRecursively()
+    }
+
+    // App-specific external cache
+    val externalCacheDir = context.externalCacheDir
+    if (externalCacheDir != null && externalCacheDir.exists()) {
+        externalCacheDir.deleteRecursively()
     }
 }
