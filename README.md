@@ -7,6 +7,17 @@ A lightweight Android app that **monitors GitHub and GitLab repositories** for t
 
 This project started as a fork of [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker) and has since been heavily re‑designed and extended.
 
+## 🎥 Screenshots
+
+<p align="center">
+  <img src="screenshot/Apps.png" width="45%" />
+  <img src="screenshot/History_Tab.png" width="45%" />
+</p>
+<p align="center">
+  <img src="screenshot/New.png" width="45%" />
+  <img src="screenshot/Setting.png" width="45%" />
+</p>
+
 ## ✨ Features
 
 ### 📦 Fast download engine
@@ -40,7 +51,7 @@ One button erases all application data, restarts the app, and returns it to a fa
 
 ## 🏆 Credits
 
-**Original author:** [jroddev](https://github.com/jroddev) — the original concept and foundation of this project.
+- **Original project:** [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker) — the foundation and inspiration for OSS Tracker RE.
 
 ## 📜 License
 
