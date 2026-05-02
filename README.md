@@ -38,6 +38,10 @@ One button erases all application data, restarts the app, and returns it to a fa
 4. **Install** – After the download finishes, tap **Tap to install**.
 5. **Manage** – Use the refresh icon to check for new releases. Import or export your list from the Settings screen.
 
+## 🏆 Credits
+
+**Original author:** [jroddev](https://github.com/jroddev) — the original concept and foundation of this project.
+
 ## 📜 License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
