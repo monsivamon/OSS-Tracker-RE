@@ -54,7 +54,7 @@ fun AboutAppDialog() {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "v0.1.9",
+                        text = "v0.2.0",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
