@@ -10,12 +10,10 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 ## 🎥 Screenshots
 
 <p align="center">
-  <img src="screenshot/Apps.png" width="45%" />
-  <img src="screenshot/History_Tab.png" width="45%" />
-</p>
-<p align="center">
-  <img src="screenshot/New.png" width="45%" />
-  <img src="screenshot/Setting.png" width="45%" />
+  <img src="screenshot/Apps.png"         alt="Apps"          width="24%" />
+  <img src="screenshot/New.png"          alt="New Tracker"   width="24%" />
+  <img src="screenshot/History_Tab.png"  alt="History"       width="24%" />
+  <img src="screenshot/Setting.png"      alt="Settings"      width="24%" />
 </p>
 
 ## ✨ Features
