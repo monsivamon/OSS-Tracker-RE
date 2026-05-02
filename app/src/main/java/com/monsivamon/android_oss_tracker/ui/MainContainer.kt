@@ -7,6 +7,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,14 +16,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
 
 /**
- * Describes a single top-level destination in the bottom navigation bar.
- *
- * Each entry maps to a page inside the [HorizontalPager] and defines both
- * the visual label and the icon shown in the [NavigationBar].
+ * Describes a top-level destination in the bottom navigation bar.
  */
 enum class AppDestination(val title: String, val icon: ImageVector) {
     APPS("Apps", Icons.AutoMirrored.Filled.List),
     NEW("New", Icons.Default.Add),
+    HISTORY("History", Icons.Default.DateRange),
     SETTINGS("Settings", Icons.Default.Settings)
 }
 
@@ -30,21 +29,9 @@ enum class AppDestination(val title: String, val icon: ImageVector) {
  * Root composable that assembles the gesture-driven pager and the bottom
  * navigation bar into the primary application shell.
  *
- * ## Architecture
- * - Navigation state is owned by [rememberPagerState] which synchronises
- *   the [HorizontalPager] offset with the selected indicator in the
- *   [NavigationBar].
- * - Tapping a bottom-bar item animates the pager smoothly via
- *   [pagerState.animateScrollToPage].
- * - No shared dependencies ([SharedPreferences], [RequestQueue]) are passed
- *   through this container; each screen accesses them through singletons or
- *   [LocalContext] when necessary.
- *
- * ## Performance
- * [HorizontalPager] keeps non-visible pages in a dormant state, so only the
- * currently visible screen actively participates in composition.  Combined
- * with the removal of parameter injection this virtually eliminates
- * unnecessary recompositions.
+ * Navigation state is owned by [rememberPagerState] which synchronises
+ * the [HorizontalPager] offset with the selected indicator in the
+ * [NavigationBar].
  */
 @Composable
 fun MainContainer() {
@@ -81,7 +68,8 @@ fun MainContainer() {
             when (page) {
                 0 -> AppsScreen()
                 1 -> NewTrackerScreen()
-                2 -> SettingsScreen()
+                2 -> HistoryScreen()
+                3 -> SettingsScreen()
             }
         }
     }

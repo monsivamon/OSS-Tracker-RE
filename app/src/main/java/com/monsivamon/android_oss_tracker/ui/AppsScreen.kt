@@ -3,6 +3,7 @@ package com.monsivamon.android_oss_tracker.ui
 import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,10 +20,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Main screen presenting the list of repositories the user is currently tracking.
- *
- * All heavy I/O (reading/writing [SharedPreferences]) is offloaded to
- * [Dispatchers.IO] so that the UI thread is never blocked, which prevents the
- * notorious `userfaultfd` timeouts seen on Android 14 with CMC GC.
+ * Includes a real-time text filter for quickly locating repositories by URL.
  */
 @Composable
 fun AppsScreen() {
@@ -41,6 +39,8 @@ fun AppsScreen() {
         repoUrls.clear()
         repoUrls.addAll(saved)
     }
+
+    var searchQuery by remember { mutableStateOf("") }
 
     val onTrackerDelete = { appName: String, repo: String ->
         PersistentState.removeTracker(ctx, sharedPreferences, appName, repo)
@@ -66,32 +66,31 @@ fun AppsScreen() {
                 .padding(vertical = 24.dp)
         )
 
-        if (repoUrls.isEmpty()) {
-            val hasSavedData = remember { mutableStateOf(true) }
-            LaunchedEffect(Unit) {
-                hasSavedData.value = withContext(Dispatchers.IO) {
-                    PersistentState.getSavedTrackers(sharedPreferences).isNotEmpty()
-                }
-            }
-            if (hasSavedData.value) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 32.dp)
-                )
-            } else {
-                Text(
-                    text = "You aren't tracking any application repositories.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp)
-                )
-            }
+        // Search/filter input
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            placeholder = { Text("Filter repositories…") },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        val filteredUrls = if (searchQuery.isBlank()) repoUrls
+        else repoUrls.filter { it.contains(searchQuery, ignoreCase = true) }
+
+        if (filteredUrls.isEmpty()) {
+            Text(
+                text = "No matching repositories.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 32.dp)
+            )
         } else {
-            repoUrls.forEach { url ->
+            filteredUrls.forEach { url ->
                 RenderItem(
                     repoUrl = url,
                     onDelete = onTrackerDelete

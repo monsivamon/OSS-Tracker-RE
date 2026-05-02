@@ -5,6 +5,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
+/**
+ * Central observable store for per-asset download statuses.
+ *
+ * Each asset is keyed by its download URL.  Composables that collect
+ * [states] react to every state transition (Idle → Downloading →
+ * Paused/Completed/Failed) without manual wiring.
+ */
 object DownloadStateManager {
     data class DownloadProgress(val bytesDownloaded: Long, val totalBytes: Long) {
         val percent: Int get() = if (totalBytes > 0) ((bytesDownloaded * 100) / totalBytes).toInt() else 0
@@ -13,6 +20,8 @@ object DownloadStateManager {
     sealed class DownloadStatus {
         object Idle : DownloadStatus()
         data class Downloading(val progress: DownloadProgress) : DownloadStatus()
+        /** Paused preserves the last progress snapshot so the UI can show a frozen bar. */
+        data class Paused(val progress: DownloadProgress) : DownloadStatus()
         data class Completed(val apkFile: File) : DownloadStatus()
         data class Failed(val error: String) : DownloadStatus()
     }

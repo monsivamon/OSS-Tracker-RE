@@ -10,35 +10,36 @@ import android.os.Environment
 import android.os.IBinder
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import com.monsivamon.android_oss_tracker.util.DownloadHistoryManager
+import com.monsivamon.android_oss_tracker.util.DownloadHistoryEntry
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadProgress
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStatus
 import kotlinx.coroutines.*
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Dedicated foreground service responsible for fetching APK binaries.
+ * Foreground service that performs APK downloads in the background.
  *
- * ## Key design decisions
- * - **No notification spam** – progress is published exclusively through
- *   [DownloadStateManager]; the foreground notification is a minimal, static
- *   placeholder that satisfies Android's requirement for foreground services.
- * - **Concurrent downloads** – an [AtomicInteger] tracks active transfers.
- *   The service is only stopped (and the notification dismissed) once *all*
- *   downloads have finished or failed.
- * - **Main-thread safety** – all I/O and network calls are dispatched on
- *   [Dispatchers.IO]; UI callbacks (`Toast`, notification posting) are switched
- *   to [Dispatchers.Main] when necessary.
- * - **Scoped storage compatibility** – output files are written to
- *   [getExternalFilesDir] (API 29+) with a transparent fallback to the internal
- *   cache directory.
+ * It supports pausing, resuming, and cancelling individual transfers while
+ * maintaining a minimal, non‑intrusive notification. The actual download
+ * progress is published exclusively through [DownloadStateManager] so that
+ * the Compose UI can react in real time.
  */
 class ApkDownloadService : Service() {
+
+    companion object {
+        const val ACTION_PAUSE = "PAUSE"
+        const val ACTION_RESUME = "RESUME"
+        const val ACTION_CANCEL = "CANCEL"
+    }
 
     private val foregroundNotificationId = 1001
     private val channelId = "apk_download_engine_channel"
@@ -46,13 +47,21 @@ class ApkDownloadService : Service() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
-    /** Number of download coroutines currently executing. */
+    /** Number of currently active (non‑paused) downloads. */
     private val activeDownloadCount = AtomicInteger(0)
 
+    /** In‑flight HTTP calls keyed by download URL. */
+    private val activeCalls = ConcurrentHashMap<String, Call>()
+
+    /** Metadata preserved for pause/resume. */
+    private val pausedJobs = ConcurrentHashMap<String, PausedJobData>()
+
+    /** Flags indicating that a particular URL was paused by the user. */
+    private val pausedByUser = ConcurrentHashMap<String, Boolean>()
+
     /**
-     * OkHttp client shared across all downloads.
-     * Initialised lazily on [Dispatchers.IO] so that the main thread is never
-     * blocked during service startup.
+     * OkHttp client shared by all downloads.
+     * Initialised lazily on a background thread to keep service startup fast.
      */
     private val client by lazy {
         runBlocking(Dispatchers.IO) {
@@ -63,74 +72,154 @@ class ApkDownloadService : Service() {
         }
     }
 
+    private data class PausedJobData(
+        val fileName: String,
+        val bytesDownloaded: Long,
+        val repoName: String
+    )
+
     override fun onCreate() {
         super.onCreate()
         initializeNotificationChannel()
     }
 
-    /**
-     * Every call to [startForegroundService] with a `DOWNLOAD_URL` extra will
-     * spawn an independent download coroutine.
-     *
-     * If the URL is missing or empty, a toast is shown and the service stops
-     * immediately (unless other downloads are still running).
-     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action ?: ""
         val downloadUrl = intent?.getStringExtra("DOWNLOAD_URL") ?: ""
         val fileName = intent?.getStringExtra("FILE_NAME") ?: "update.apk"
+        val repoName = intent?.getStringExtra("REPO_NAME") ?: "Unknown"
 
-        if (downloadUrl.isNullOrEmpty()) {
-            serviceScope.launch(Dispatchers.Main) {
-                Toast.makeText(applicationContext, "DL Error: URL is missing or empty!", Toast.LENGTH_LONG).show()
+        when {
+            downloadUrl.isNullOrEmpty() -> {
+                serviceScope.launch(Dispatchers.Main) {
+                    Toast.makeText(applicationContext, "DL Error: URL is missing or empty!", Toast.LENGTH_LONG).show()
+                }
+                stopSelf()
             }
-            stopSelf()
-            return START_NOT_STICKY
+            action == ACTION_PAUSE -> pauseDownload(downloadUrl)
+            action == ACTION_RESUME -> resumeDownload(downloadUrl)
+            action == ACTION_CANCEL -> cancelDownload(downloadUrl)
+            else -> startNewDownload(downloadUrl, fileName, repoName)
         }
+        return START_REDELIVER_INTENT
+    }
 
-        DownloadStateManager.updateStatus(downloadUrl, DownloadStatus.Downloading(DownloadProgress(0, 0)))
+    // ── Download control ─────────────────────────────────────────────
 
-        // Bare-minimum foreground notification (never updated with progress)
-        val simpleNotification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Downloading …")
-            .setOngoing(true)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(foregroundNotificationId, simpleNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(foregroundNotificationId, simpleNotification)
-        }
+    private fun startNewDownload(url: String, fileName: String, repoName: String) {
+        DownloadStateManager.updateStatus(url, DownloadStatus.Downloading(DownloadProgress(0, 0)))
+        updateForegroundNotification("Downloading …")
 
         activeDownloadCount.incrementAndGet()
 
         serviceScope.launch {
             try {
-                executeNetworkStream(downloadUrl, fileName)
+                executeNetworkStream(url, fileName, repoName, 0, false)
             } finally {
-                if (activeDownloadCount.decrementAndGet() == 0) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                if (pausedByUser[url] != true) {
+                    if (activeDownloadCount.decrementAndGet() == 0) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
                 }
             }
         }
+    }
 
-        return START_REDELIVER_INTENT
+    private fun pauseDownload(url: String) {
+        pausedByUser[url] = true
+        activeCalls[url]?.cancel()
+        val downloading = DownloadStateManager.states.value[url] as? DownloadStatus.Downloading
+        val progress = downloading?.progress ?: DownloadProgress(0, 0)
+        DownloadStateManager.updateStatus(url, DownloadStatus.Paused(progress))
+        updateForegroundNotification("Download paused", android.R.drawable.ic_media_pause)
+    }
+
+    private fun resumeDownload(url: String) {
+        pausedByUser.remove(url)
+        val pausedStatus = DownloadStateManager.states.value[url] as? DownloadStatus.Paused ?: run {
+            DownloadStateManager.updateStatus(url, DownloadStatus.Failed("Resume data lost"))
+            return
+        }
+        val startByte = pausedStatus.progress.bytesDownloaded
+        val paused = pausedJobs.remove(url) ?: run {
+            DownloadStateManager.updateStatus(url, DownloadStatus.Failed("Resume data lost"))
+            return
+        }
+        val fileName = paused.fileName
+        val repoName = paused.repoName
+
+        updateForegroundNotification("Downloading …")
+        activeDownloadCount.incrementAndGet()
+        serviceScope.launch {
+            try {
+                executeNetworkStream(url, fileName, repoName, startByte, true)
+            } finally {
+                if (pausedByUser[url] != true) {
+                    if (activeDownloadCount.decrementAndGet() == 0) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
+            }
+        }
     }
 
     /**
-     * Performs the actual HTTP transfer, writing the response body to a
-     * temporary file and broadcasting status updates via [DownloadStateManager].
+     * Cancels a download regardless of its current state (running, paused, …).
+     * The underlying OkHttp call is aborted and the foreground notification is
+     * dismissed as soon as no active transfers remain.
      */
-    private suspend fun executeNetworkStream(url: String, fileName: String) {
-        val request = Request.Builder().url(url).build()
+    private fun cancelDownload(url: String) {
+        pausedByUser[url] = true
+        activeCalls[url]?.cancel()
+
+        val currentStatus = DownloadStateManager.states.value[url]
+        val wasActive = currentStatus is DownloadStatus.Downloading || currentStatus is DownloadStatus.Paused
+
+        activeCalls.remove(url)
+        pausedJobs.remove(url)
+        pausedByUser.remove(url)
+
+        if (wasActive) {
+            activeDownloadCount.decrementAndGet()
+        }
+
+        DownloadStateManager.updateStatus(url, DownloadStatus.Idle)
+
+        if (activeDownloadCount.get() == 0) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else {
+            updateForegroundNotification("Downloading …")
+        }
+    }
+
+    // ── Core network logic ───────────────────────────────────────────
+
+    /**
+     * Opens a connection to [url], streams the response body to a local file,
+     * and publishes progress updates to [DownloadStateManager].
+     *
+     * When [append] is `true` the file is opened in append mode and a
+     * `Range` header is sent to resume from [startByte].
+     */
+    private suspend fun executeNetworkStream(
+        url: String, fileName: String, repoName: String,
+        startByte: Long, append: Boolean
+    ) {
+        val requestBuilder = Request.Builder().url(url)
+        if (startByte > 0) requestBuilder.header("Range", "bytes=$startByte-")
+        val request = requestBuilder.build()
 
         try {
-            val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
-            if (!response.isSuccessful) throw Exception("HTTP $response.code")
+            val call = client.newCall(request)
+            activeCalls[url] = call
+            val response = withContext(Dispatchers.IO) { call.execute() }
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
 
             val body = response.body ?: throw Exception("Empty response body")
-            val totalBytes = body.contentLength()
+            val totalBytes = startByte + body.contentLength()
 
             val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: cacheDir
             if (!downloadsDir.exists()) downloadsDir.mkdirs()
@@ -138,9 +227,9 @@ class ApkDownloadService : Service() {
 
             withContext(Dispatchers.IO) {
                 body.use { responseBody ->
-                    FileOutputStream(outputFile).use { outputStream ->
+                    FileOutputStream(outputFile, append).use { outputStream ->
                         val inputStream = responseBody.byteStream()
-                        var bytesCopied: Long = 0
+                        var bytesCopied = startByte
                         val buffer = ByteArray(8 * 1024)
                         var bytes = inputStream.read(buffer)
                         var lastUpdateTime = System.currentTimeMillis()
@@ -157,9 +246,10 @@ class ApkDownloadService : Service() {
                                 )
                                 lastUpdateTime = now
                             }
+                            // Always keep the latest progress for a potential resume
+                            pausedJobs[url] = PausedJobData(fileName, bytesCopied, repoName)
                             bytes = inputStream.read(buffer)
                         }
-                        // Push final progress snapshot
                         DownloadStateManager.updateStatus(
                             url,
                             DownloadStatus.Downloading(DownloadProgress(bytesCopied, totalBytes))
@@ -168,20 +258,65 @@ class ApkDownloadService : Service() {
                 }
             }
 
+            pausedByUser.remove(url)
+            DownloadHistoryManager.addEntry(
+                this, DownloadHistoryEntry(
+                    assetName = fileName, repoName = repoName,
+                    downloadUrl = url, timestampMillis = System.currentTimeMillis(),
+                    success = true
+                )
+            )
             DownloadStateManager.updateStatus(url, DownloadStatus.Completed(outputFile))
 
         } catch (e: Exception) {
+            // Ignore exceptions caused by user-requested pause or cancel
+            if (pausedByUser[url] == true) return
             e.printStackTrace()
+            DownloadHistoryManager.addEntry(
+                this, DownloadHistoryEntry(
+                    assetName = fileName, repoName = repoName,
+                    downloadUrl = url, timestampMillis = System.currentTimeMillis(),
+                    success = false
+                )
+            )
             DownloadStateManager.updateStatus(url, DownloadStatus.Failed(e.message ?: "Unknown error"))
             withContext(Dispatchers.Main) {
                 Toast.makeText(applicationContext, "DL Error: ${e.message}", Toast.LENGTH_LONG).show()
             }
+        } finally {
+            activeCalls.remove(url)
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Creates or updates the foreground notification.
+     *
+     * On API 29+ [ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC] is provided
+     * explicitly to guarantee instant notification visibility.
+     */
+    private fun updateForegroundNotification(title: String, iconRes: Int = android.R.drawable.stat_sys_download) {
+        val notification = buildSimpleNotification(title, iconRes)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(foregroundNotificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(foregroundNotificationId, notification)
         }
     }
 
     /**
-     * Creates the notification channel used by the foreground notification.
-     * Channels must be created on Android 8.0+ before a notification can be posted.
+     * Constructs the simplest possible ongoing notification.
+     */
+    private fun buildSimpleNotification(title: String, iconRes: Int = android.R.drawable.stat_sys_download) =
+        NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(iconRes)
+            .setContentTitle(title)
+            .setOngoing(true)
+            .build()
+
+    /**
+     * Creates the notification channel required on Android 8.0+.
      */
     private fun initializeNotificationChannel() {
         val channel = NotificationChannel(channelId, "Download Service", NotificationManager.IMPORTANCE_LOW).apply {

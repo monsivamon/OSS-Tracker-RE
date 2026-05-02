@@ -9,16 +9,15 @@ import org.json.JSONArray
 import java.net.URL
 
 /**
- * An in-memory cache to store and retrieve repository metadata.
- * Prevents redundant network requests across UI recompositions.
+ * Lightweight in‑memory cache for repository metadata.
+ * Using this instead of repeated network calls avoids unnecessary
+ * API consumption and keeps the UI instantly responsive.
  */
 object AppCache {
     val cachedRepos = mutableMapOf<String, RepoMetaData>()
 }
 
-/**
- * Represents the current lifecycle state of a repository's metadata fetching process.
- */
+/** Lifecycle states for a repository’s metadata retrieval. */
 enum class MetaDataState {
     Unsupported,
     Loading,
@@ -26,18 +25,14 @@ enum class MetaDataState {
     Loaded
 }
 
-/**
- * Data class representing a downloadable asset (e.g., an APK file) associated with a release.
- */
+/** Represents a downloadable file (typically an APK) attached to a release. */
 data class AssetInfo(
     val name: String,
     val downloadUrl: String,
     val size: Long
 )
 
-/**
- * Data class holding the parsed details of the latest repository release.
- */
+/** Parsed information about the latest (or greatest) release of a repository. */
 data class LatestVersionData(
     val version: String,
     val url: String,
@@ -46,19 +41,23 @@ data class LatestVersionData(
 )
 
 /**
- * Holds the reactive UI state and network logic for a single tracked repository.
- * Integrates directly with Jetpack Compose via [mutableStateOf].
+ * Reactive UI state and network logic for a single tracked repository.
  *
- * @property repoUrl The remote repository URL being tracked.
- * @property requestQueue The Volley RequestQueue for handling network operations.
+ * Every mutable property is backed by Compose [mutableStateOf] so the UI
+ * recomposes automatically when network requests finish.
+ *
+ * @param repoUrl  Public URL of the repository being tracked.
+ * @param requestQueue  Application‑scoped Volley queue.
  */
 data class RepoMetaData(
     val repoUrl: String,
     val requestQueue: RequestQueue,
 ) {
-    val repo: Repo? = Repo.Helper.new(repoUrl)
-    var orgName: String
-    var appName: String
+    // Repo.Helper.new() now always returns a non‑null implementation (fallback to GitHub)
+    val repo: Repo = Repo.Helper.new(repoUrl)
+    val orgName: String = repo.getOrgName(repoUrl)
+    val appName: String = repo.getApplicationName(repoUrl)
+
     val state = mutableStateOf(MetaDataState.Unsupported)
 
     val latestVersion = mutableStateOf<String?>(null)
@@ -67,30 +66,26 @@ data class RepoMetaData(
     val latestAssets = mutableStateOf<List<AssetInfo>>(emptyList())
     val errors = mutableStateListOf<String>()
 
+    // Job used to cancel any in‑flight refresh when a new one is triggered.
+    private var refreshJob: Job? = null
+
     init {
-        if (repo == null) {
-            state.value = MetaDataState.Unsupported
-            orgName = ""
-            appName = ""
-        } else {
-            state.value = MetaDataState.Loading
-            orgName = repo.getOrgName(repoUrl)
-            appName = repo.getApplicationName(repoUrl)
-        }
+        state.value = MetaDataState.Loading
     }
 
     /**
-     * Triggers an asynchronous network request to fetch the latest release data.
-     * Updates the reactive state variables upon successful completion or failure.
+     * Launches a network call to fetch the latest release data.
+     *
+     * If a previous refresh is still running, it is cancelled before the
+     * new one starts.  This prevents redundant API calls when the user
+     * repeatedly presses the refresh button.
      */
     fun refreshNetwork() {
-        if (repo == null) return
-
         state.value = MetaDataState.Loading
         errors.clear()
 
-        val scope = CoroutineScope(Job() + Dispatchers.Main)
-        scope.launch {
+        refreshJob?.cancel()
+        refreshJob = CoroutineScope(Dispatchers.Main).launch {
             when (val result = repo.fetchLatestVersion(orgName, appName, requestQueue)) {
                 is Either.Left -> {
                     latestVersion.value = result.value.version
@@ -109,7 +104,7 @@ data class RepoMetaData(
 }
 
 /**
- * Interface defining the contract for repository service providers (e.g., GitHub, GitLab).
+ * Contract for a repository hosting provider (GitHub, GitLab, etc.).
  */
 interface Repo {
     fun getOrgName(repoUrl: String): String
@@ -137,21 +132,29 @@ interface Repo {
     ): String
 
     /**
-     * Factory object to instantiate the correct [Repo] implementation based on the provided URL.
+     * Resolves the correct [Repo] implementation based on the URL host.
+     *
+     * Unknown or unrecognized hosts default to [GitHub] after logging a
+     * warning to the console.
      */
     object Helper {
-        fun new(repoUrl: String): Repo =
-            if (repoUrl.contains("github")) {
-                GitHub()
-            } else {
-                GitLab()
+        fun new(repoUrl: String): Repo {
+            val host = runCatching { URL(repoUrl).host.lowercase() }.getOrDefault("")
+            return when {
+                host.contains("github.com") -> GitHub()
+                host.contains("gitlab")     -> GitLab()
+                else -> {
+                    println("[Repo.Helper] Unknown host '$host', defaulting to GitHub")
+                    GitHub()
+                }
             }
+        }
     }
 }
 
 /**
- * Abstract base class providing shared logic and URL parsing utilities
- * for different repository providers.
+ * Shared logic for any repository provider that follows a similar
+ * REST‑ful API pattern.
  */
 abstract class CommonRepo : Repo {
 
@@ -160,25 +163,64 @@ abstract class CommonRepo : Repo {
     abstract fun getReadmeUrl(org: String, app: String): String
     abstract fun getReleasesUrl(org: String, app: String): String
     abstract fun getRssFeedUrl(org: String, app: String): String
-    abstract fun parseReleasesJson(data: JSONArray): LatestVersionData
 
-    val VERSION_NAME_REGEX = "([0-9]+\\S*)".toRegex()
+    // ── Version helpers ───────────────────────────────────────
+
+    private val versionPattern = Regex("v?([0-9]+\\S*)")
 
     /**
-     * Extracts a clean version string from raw release tags (e.g., "v1.2.3" -> "1.2.3").
+     * Strips an optional leading “v” and extracts the first version‑like
+     * substring from [raw].  Returns `null` if nothing resembling a version
+     * is found.
      */
-    fun cleanVersionName(input: String): String? =
-        VERSION_NAME_REGEX.find(input)?.groups?.get(0)?.value
+    fun cleanVersionName(raw: String): String? =
+        versionPattern.find(raw)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
+
+    /**
+     * Compares two version strings that have already been cleaned by
+     * [cleanVersionName] (i.e. no leading “v”).
+     *
+     * The comparison is done segment‑by‑segment, splitting on dots
+     * and hyphens.  Numeric segments are compared as integers,
+     * non‑numeric segments lexicographically.
+     */
+    private fun compareVersions(a: String, b: String): Int {
+        val partsA = a.split(".", "-")
+        val partsB = b.split(".", "-")
+        val maxLen = maxOf(partsA.size, partsB.size)
+        for (i in 0 until maxLen) {
+            val segA = partsA.getOrNull(i) ?: return -1
+            val segB = partsB.getOrNull(i) ?: return 1
+            val numA = segA.toIntOrNull()
+            val numB = segB.toIntOrNull()
+            when {
+                numA != null && numB != null -> {
+                    if (numA != numB) return numA.compareTo(numB)
+                }
+                numA != null -> return 1
+                numB != null -> return -1
+                else -> {
+                    val cmp = segA.compareTo(segB)
+                    if (cmp != 0) return cmp
+                }
+            }
+        }
+        return 0
+    }
+
+    // ── URL parsing utilities ─────────────────────────────────
 
     override fun getOrgName(repoUrl: String): String {
-        val url = URL(repoUrl)
-        return url.path.split("/")[1]
+        val path = URL(repoUrl).path.trimEnd('/').removeSuffix(".git")
+        return path.split("/").drop(1).firstOrNull() ?: ""
     }
 
     override fun getApplicationName(repoUrl: String): String {
-        val url = URL(repoUrl)
-        return url.path.split("/")[2]
+        val path = URL(repoUrl).path.trimEnd('/').removeSuffix(".git")
+        return path.split("/").drop(2).firstOrNull() ?: ""
     }
+
+    // ── Network fetchers ──────────────────────────────────────
 
     override suspend fun fetchBranchName(
         org: String,
@@ -187,19 +229,22 @@ abstract class CommonRepo : Repo {
     ): Either<String, Error> {
         val url = getRepoMetaDataUrl(org, app)
         return when (val response = ApiUtils.getJsonObject(url, requestQueue)) {
-            is Either.Left -> {
-                try {
-                    Either.Left(response.value.getString("default_branch"))
-                } catch (e: Exception) {
-                    Either.Right(Error("Could not parse result of fetchBranchName api call"))
-                }
+            is Either.Left -> try {
+                Either.Left(response.value.getString("default_branch"))
+            } catch (e: Exception) {
+                Either.Right(Error("Could not parse default_branch"))
             }
-            is Either.Right -> {
-                Either.Right(Error(response.value))
-            }
+            is Either.Right -> Either.Right(Error(response.value))
         }
     }
 
+    /**
+     * Retrieves the list of releases from the provider’s API and returns
+     * the **highest** version according to [compareVersions].
+     *
+     * This ensures that “v1.25.0‑dev.12” is correctly chosen over
+     * “v1.25.0‑dev.9”, even if the API array ordering is unexpected.
+     */
     override suspend fun fetchLatestVersion(
         org: String,
         app: String,
@@ -209,17 +254,33 @@ abstract class CommonRepo : Repo {
         return when (val response = ApiUtils.getJsonArray(url, requestQueue)) {
             is Either.Left -> {
                 try {
-                    val parsed = parseReleasesJson(response.value)
-                    Either.Left(parsed)
+                    val releases = response.value
+                    if (releases.length() == 0) {
+                        return Either.Right(Error("No releases found"))
+                    }
+                    // Parse every release, pick the one with the greatest version
+                    val allVersions = mutableListOf<LatestVersionData>()
+                    for (i in 0 until releases.length()) {
+                        val entry = releases.getJSONObject(i)
+                        allVersions.add(parseReleaseEntry(entry))
+                    }
+                    val latest = allVersions.maxWithOrNull { a, b ->
+                        compareVersions(a.version, b.version)
+                    } ?: throw Exception("Could not determine latest version")
+                    Either.Left(latest)
                 } catch (e: Exception) {
-                    Either.Right(Error("Could not parse result of fetchLatestVersion api call"))
+                    Either.Right(Error("Could not parse releases: ${e.message}"))
                 }
             }
-            is Either.Right -> {
-                Either.Right(Error(response.value))
-            }
+            is Either.Right -> Either.Right(Error(response.value))
         }
     }
+
+    /**
+     * Parses a single JSON object from the releases array into a
+     * [LatestVersionData] instance.  Subclasses must implement this.
+     */
+    protected abstract fun parseReleaseEntry(entry: org.json.JSONObject): LatestVersionData
 
     override suspend fun tryDetermineAndroidRoot(
         org: String,
@@ -227,16 +288,19 @@ abstract class CommonRepo : Repo {
         branch: String,
         requestQueue: RequestQueue
     ): String {
+        // Check the most common Android project root paths in parallel
         val candidates = listOf("app", "android/app")
-        candidates.forEach { candidate ->
-            if (ApiUtils.get(
-                    getFileMetaDataUrl(org, app, branch, "$candidate/build.gradle"),
-                    requestQueue
-                ).isLeft()
-            ) {
-                return candidate
+        return coroutineScope {
+            val deferred = candidates.map { candidate ->
+                async {
+                    if (ApiUtils.get(
+                            getFileMetaDataUrl(org, app, branch, "$candidate/build.gradle"),
+                            requestQueue
+                        ).isLeft()
+                    ) candidate else null
+                }
             }
+            deferred.awaitAll().firstOrNull { it != null } ?: ""
         }
-        return ""
     }
 }

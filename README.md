@@ -1,36 +1,43 @@
 # OSS Tracker RE
 
 [![Latest Release](https://img.shields.io/github/v/release/monsivamon/OSS-Tracker-RE)](https://github.com/monsivamon/OSS-Tracker-RE/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A lightweight Android application to track and download the latest APK releases directly from GitHub and GitLab repositories.
-The core concept of this tracker is a modernized remake based on [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker).
+A lightweight Android app that **monitors GitHub and GitLab repositories** for the latest APK releases, **downloads them in the background**, and lets you **install them with a single tap**. No browser, no file manager — everything happens right inside the app.
 
-## ✨ Key Features
+This project started as a fork of [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker) and has since been heavily re‑designed and extended.
 
-### 1. Direct APK Downloads
-Bypass complex web navigation. Download the latest `.apk` files directly to your device from the tracked repositories.
+## ✨ Features
 
-### 2. Multi-Platform Tracking
-Seamlessly fetch release data and assets from both **GitHub** and **GitLab** using a single, unified interface.
+### 📦 Fast download engine
+APKs are fetched by a dedicated foreground service. **Real‑time progress** is displayed (file name, percentage, and a progress bar). You can **pause, resume, or cancel** downloads whenever you want.
 
-### 3. Simple List Management
-Easily back up or migrate your tracked apps. The built-in import/export feature allows you to manage your repository list as a simple text file.
+### ⚡ One‑tap install
+When a download completes, a **“Tap to install”** button appears inside the repository card. Tap it, and the system package installer takes over.
 
-## 🚀 Usage Guide
+### 🔍 Smart filtering
+Instantly search through your tracked repositories from the Apps screen.
 
-To get started with tracking your favorite OSS apps:
+### 🌓 Theme support
+Choose between **Light**, **Dark**, or **System** theme. Your preference is saved automatically.
 
-* **Add Tracker:** Navigate to the **New** tab, enter a GitHub/GitLab repository URL, tap **Test**, and then tap **+**.
-* **Download & Update:** On the **Apps** tab, tap any tracked repository to view available APKs. Use the refresh icon to check for the newest versions.
-* **Backup:** Go to the **Settings** tab to import or export your list.
+### 📂 Import / Export
+Back up or migrate your list of tracked repositories as a plain text file.
 
-## 📥 Download
+### 📋 Download history
+The **History** tab records every download — successful or failed — so you always know what you installed and when.
 
-Get the latest pre-built APK from the **[Releases Page](https://github.com/monsivamon/OSS-Tracker-RE/releases)**.
+### 🔄 Reset function
+One button erases all application data, restarts the app, and returns it to a factory‑fresh state.
 
-## Credits
+## 🚀 Usage
 
-* [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker) - The original concept and codebase.
+1. **Add a repository** – Go to the **New** tab, enter a GitHub or GitLab URL, and tap **Test Repository**.
+2. **Start tracking** – Tap the **+** button to add it to your list.
+3. **Download** – On the **Apps** tab, tap **Download** on any asset. Progress is shown in real time — pause or resume as needed.
+4. **Install** – After the download finishes, tap **Tap to install**.
+5. **Manage** – Use the refresh icon to check for new releases. Import or export your list from the Settings screen.
 
 ## 📜 License
-MIT
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
