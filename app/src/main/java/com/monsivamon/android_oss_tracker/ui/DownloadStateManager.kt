@@ -6,11 +6,10 @@ import kotlinx.coroutines.flow.update
 import java.io.File
 
 /**
- * Central observable store for per-asset download statuses.
+ * Central, observable registry that tracks the download status of every
+ * URL requested through [ApkDownloadService].
  *
- * Each asset is keyed by its download URL.  Composables that collect
- * [states] react to every state transition (Idle → Downloading →
- * Paused/Completed/Failed) without manual wiring.
+ * Compose screens collect [states] as a StateFlow and react in real time.
  */
 object DownloadStateManager {
     data class DownloadProgress(val bytesDownloaded: Long, val totalBytes: Long) {
@@ -20,7 +19,7 @@ object DownloadStateManager {
     sealed class DownloadStatus {
         object Idle : DownloadStatus()
         data class Downloading(val progress: DownloadProgress) : DownloadStatus()
-        /** Paused preserves the last progress snapshot so the UI can show a frozen bar. */
+        /** Paused keeps the last snapshot so the UI renders a frozen progress bar. */
         data class Paused(val progress: DownloadProgress) : DownloadStatus()
         data class Completed(val apkFile: File) : DownloadStatus()
         data class Failed(val error: String) : DownloadStatus()

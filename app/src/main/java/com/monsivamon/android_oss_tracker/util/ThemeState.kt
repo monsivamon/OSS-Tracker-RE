@@ -8,10 +8,11 @@ import androidx.compose.runtime.setValue
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /**
- * Application-wide theme preference holder with automatic persistence.
+ * Persisted theme preference.
  *
- * The selected [ThemeMode] is immediately written to [SharedPreferences]
- * and restored on the next process start.
+ * Call [init] once during [Application.onCreate]; afterwards the selected
+ * mode is immediately written to [SharedPreferences] and can be observed
+ * by Compose.
  */
 object ThemeState {
     private const val PREFS_NAME = "theme_state"
@@ -31,7 +32,6 @@ object ThemeState {
         initialized = true
     }
 
-    /** The currently active theme mode. Can be observed by Compose. */
     var currentMode: ThemeMode by mutableStateOf(ThemeMode.SYSTEM)
         private set
 
