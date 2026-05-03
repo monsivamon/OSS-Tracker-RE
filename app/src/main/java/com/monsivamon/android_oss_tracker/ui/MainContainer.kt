@@ -15,9 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
 
-/**
- * Describes a top-level destination in the bottom navigation bar.
- */
+/** Top‑level destinations for the bottom navigation bar. */
 enum class AppDestination(val title: String, val icon: ImageVector) {
     APPS("Apps", Icons.AutoMirrored.Filled.List),
     NEW("New", Icons.Default.Add),
@@ -26,12 +24,10 @@ enum class AppDestination(val title: String, val icon: ImageVector) {
 }
 
 /**
- * Root composable that assembles the gesture-driven pager and the bottom
- * navigation bar into the primary application shell.
+ * Root composable that wires the swipeable pager and bottom navigation bar.
  *
- * Navigation state is owned by [rememberPagerState] which synchronises
- * the [HorizontalPager] offset with the selected indicator in the
- * [NavigationBar].
+ * No shared dependencies are passed through; each screen obtains what it
+ * needs from singletons or [LocalContext].
  */
 @Composable
 fun MainContainer() {
@@ -42,28 +38,22 @@ fun MainContainer() {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                destinations.forEachIndexed { index, destination ->
+                destinations.forEachIndexed { index, dest ->
                     NavigationBarItem(
-                        icon = {
-                            Icon(destination.icon, contentDescription = destination.title)
-                        },
-                        label = { Text(destination.title) },
+                        icon = { Icon(dest.icon, contentDescription = dest.title) },
+                        label = { Text(dest.title) },
                         selected = pagerState.currentPage == index,
                         onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(index)
-                            }
+                            coroutineScope.launch { pagerState.animateScrollToPage(index) }
                         }
                     )
                 }
             }
         }
-    ) { paddingValues ->
+    ) { padding ->
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) { page ->
             when (page) {
                 0 -> AppsScreen()

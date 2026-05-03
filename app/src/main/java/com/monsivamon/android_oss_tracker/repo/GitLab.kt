@@ -1,7 +1,14 @@
 package com.monsivamon.android_oss_tracker.repo
 
 import org.json.JSONArray
+import org.json.JSONObject
 
+/**
+ * GitLab API v4 implementation of [CommonRepo].
+ *
+ * Targets gitlab.com; for self‑hosted instances the base URL must be
+ * adjusted.
+ */
 class GitLab : CommonRepo() {
 
     override fun getUrlOfRawFile(
@@ -32,30 +39,35 @@ class GitLab : CommonRepo() {
     override fun getRssFeedUrl(org: String, app: String): String =
         "https://gitlab.com/$org/$app/-/tags?format=atom"
 
-    override fun parseReleaseEntry(entry: org.json.JSONObject): LatestVersionData {
+    override fun parseReleasesJsonArray(data: JSONArray): List<LatestVersionData> {
+        val list = mutableListOf<LatestVersionData>()
+        for (i in 0 until data.length()) {
+            list.add(parseReleaseEntry(data.getJSONObject(i)))
+        }
+        return list
+    }
+
+    private fun parseReleaseEntry(entry: JSONObject): LatestVersionData {
         val rawName = entry.optString("name").takeIf { it.isNotBlank() }
             ?: entry.optString("tag_name").takeIf { it.isNotBlank() }
             ?: "unknown"
         val version = cleanVersionName(rawName) ?: rawName
-        val url = entry.optJSONObject("_links")?.optString("self") ?: ""
+        val url  = entry.optJSONObject("_links")?.optString("self") ?: ""
         val date = entry.optString("released_at")
 
         val assetList = mutableListOf<AssetInfo>()
-        val assetsObj = entry.optJSONObject("assets")
-        val linksArray = assetsObj?.optJSONArray("links")
+        val linksArray = entry.optJSONObject("assets")?.optJSONArray("links")
         if (linksArray != null) {
             for (i in 0 until linksArray.length()) {
-                val linkObj = linksArray.getJSONObject(i)
-                val downloadUrl = linkObj.optString("direct_asset_url").takeIf { it.isNotBlank() }
-                    ?: linkObj.optString("url").takeIf { it.isNotBlank() }
+                val link = linksArray.getJSONObject(i)
+                val downloadUrl = link.optString("direct_asset_url").takeIf { it.isNotBlank() }
+                    ?: link.optString("url").takeIf { it.isNotBlank() }
                     ?: continue
-                assetList.add(
-                    AssetInfo(
-                        name = linkObj.optString("name", "unknown"),
-                        downloadUrl = downloadUrl,
-                        size = 0L
-                    )
-                )
+                assetList.add(AssetInfo(
+                    name = link.optString("name", "unknown"),
+                    downloadUrl = downloadUrl,
+                    size = 0L
+                ))
             }
         }
         return LatestVersionData(version = version, url = url, date = date, assets = assetList)

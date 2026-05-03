@@ -25,20 +25,16 @@ import com.monsivamon.android_oss_tracker.util.DownloadStateManager
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStatus
 
 /**
- * A single card that represents one tracked repository.
+ * Elevated card representing one tracked repository.
  *
- * Tapping the refresh icon cancels every in‑flight or paused download for
- * this repository, resets completed / failed assets back to Idle, and
- * then refreshes the repository metadata from the network.
- * The delete icon removes the repository from persistent storage and the
- * in‑memory cache.
+ * Tapping the refresh icon cancels any in‑flight downloads for this
+ * repository, resets completed / failed assets to Idle, and re‑fetches
+ * metadata from the network.  The delete icon removes the repository
+ * from persistent storage and the in‑memory cache.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RenderItem(
-    repoUrl: String,
-    onDelete: (String, String) -> Unit
-) {
+fun RenderItem(repoUrl: String, onDelete: (String, String) -> Unit) {
     val context = LocalContext.current
     val requestQueue = remember { OSSApp.requestQueue }
     val metaData = remember(repoUrl) {
@@ -48,31 +44,30 @@ fun RenderItem(
     }
 
     ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMedium
-                )
-            ),
+        modifier = Modifier.fillMaxWidth().animateContentSize(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        ),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
-        onClick = { /* Optional: open in external browser */ }
+        onClick = { /* optional: open in external browser */ }
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.fillMaxWidth().padding(end = 48.dp)) {
                 Crossfade(
-                    targetState = if (metaData.latestVersion.value != null)
+                    targetState = if (metaData.latestRelease.value != null ||
+                        metaData.latestPreRelease.value != null)
                         MetaDataState.Loaded else metaData.state.value,
                     animationSpec = tween(durationMillis = 300),
                     label = "SmoothStateTransition"
                 ) { state ->
                     when (state) {
                         MetaDataState.Unsupported -> UnsupportedTracker(metaData)
-                        MetaDataState.Loading -> LoadingTracker(metaData)
-                        MetaDataState.Errored -> ErroredTracker(metaData)
-                        MetaDataState.Loaded -> LoadedTracker(metaData)
+                        MetaDataState.Loading    -> LoadingTracker(metaData)
+                        MetaDataState.Errored    -> ErroredTracker(metaData)
+                        MetaDataState.Loaded     -> LoadedTracker(metaData)
                     }
                 }
             }
@@ -82,13 +77,13 @@ fun RenderItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 IconButton(onClick = {
-                    // Reset every asset's download state before re‑fetching metadata.
-                    val currentAssets = metaData.latestAssets.value
-                    currentAssets.forEach { asset ->
+                    // Cancel / reset all downloads, then re‑fetch metadata
+                    val allAssets = metaData.latestRelease.value?.assets.orEmpty() +
+                            metaData.latestPreRelease.value?.assets.orEmpty()
+                    allAssets.forEach { asset ->
                         val status = DownloadStateManager.states.value[asset.downloadUrl]
                         when (status) {
                             is DownloadStatus.Downloading, is DownloadStatus.Paused -> {
-                                // Active transfers must be cancelled through the service.
                                 val cancelIntent = Intent(context, ApkDownloadService::class.java).apply {
                                     action = ApkDownloadService.ACTION_CANCEL
                                     putExtra("DOWNLOAD_URL", asset.downloadUrl)
@@ -96,26 +91,20 @@ fun RenderItem(
                                 context.startService(cancelIntent)
                             }
                             is DownloadStatus.Completed, is DownloadStatus.Failed -> {
-                                // Completed / failed assets bypass the service.
                                 DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
                             }
-                            else -> { /* Idle assets remain untouched */ }
+                            else -> { /* Idle stays untouched */ }
                         }
                     }
                     metaData.refreshNetwork()
                 }) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh Repository",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Icon(Icons.Default.Refresh, "Refresh Repository",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+
                 IconButton(onClick = { onDelete(metaData.appName, metaData.repoUrl) }) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Tracker",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                    Icon(Icons.Default.Delete, "Delete Tracker",
+                        tint = MaterialTheme.colorScheme.error)
                 }
             }
         }

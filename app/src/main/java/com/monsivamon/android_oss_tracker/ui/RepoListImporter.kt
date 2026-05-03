@@ -17,9 +17,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Imports a list of repository URLs from a plain-text file chosen by the user.
- * The file is read on a background thread; parsing and cache invalidation are
- * performed on [Dispatchers.IO] to keep the UI responsive.
+ * Lets the user pick a plain‑text file and import its lines as
+ * repository URLs.  Parsing and cache invalidation happen off the
+ * main thread.
  */
 @Composable
 fun RepoListImporter() {
@@ -30,7 +30,6 @@ fun RepoListImporter() {
     val scope = rememberCoroutineScope()
 
     val reader = FileHelpers.readFile({ data ->
-        println("Read file content: $data")
         if (data.isNotEmpty()) {
             scope.launch {
                 withContext(Dispatchers.IO) {
@@ -45,16 +44,11 @@ fun RepoListImporter() {
     })
 
     OutlinedButton(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(12.dp),
         onClick = { reader.launch(arrayOf("text/plain")) }
     ) {
-        Text(
-            text = "Import Repo List",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
+        Text("Import Repo List", style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(vertical = 4.dp))
     }
 }

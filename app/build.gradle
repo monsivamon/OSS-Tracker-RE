@@ -53,7 +53,7 @@ android {
         minSdk 27
         targetSdk 34
         versionCode 8
-        versionName "0.2.0"
+        versionName "0.2.1"
 
         // Expose the GitHub token as a compile-time constant.
         // The value is only available in the BuildConfig class

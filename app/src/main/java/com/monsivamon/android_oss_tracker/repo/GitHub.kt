@@ -1,7 +1,15 @@
 package com.monsivamon.android_oss_tracker.repo
 
 import org.json.JSONArray
+import org.json.JSONObject
 
+/**
+ * GitHub implementation of [CommonRepo].
+ *
+ * Uses the public GitHub REST API (api.github.com).  Unauthenticated
+ * requests are capped at 60 per hour; supply a token via [ApiUtils]
+ * to raise that limit.
+ */
 class GitHub : CommonRepo() {
 
     override fun getUrlOfRawFile(
@@ -24,28 +32,33 @@ class GitHub : CommonRepo() {
     override fun getRssFeedUrl(org: String, app: String): String =
         "https://github.com/$org/$app/releases.atom"
 
-    override fun parseReleaseEntry(entry: org.json.JSONObject): LatestVersionData {
+    override fun parseReleasesJsonArray(data: JSONArray): List<LatestVersionData> {
+        val list = mutableListOf<LatestVersionData>()
+        for (i in 0 until data.length()) {
+            list.add(parseReleaseEntry(data.getJSONObject(i)))
+        }
+        return list
+    }
+
+    private fun parseReleaseEntry(entry: JSONObject): LatestVersionData {
         val rawName = entry.optString("name").takeIf { it.isNotBlank() }
             ?: entry.optString("tag_name").takeIf { it.isNotBlank() }
             ?: "unknown"
         val version = cleanVersionName(rawName) ?: rawName
-        val url = entry.optString("html_url")
+        val url  = entry.optString("html_url")
         val date = entry.optString("published_at")
 
         val assetList = mutableListOf<AssetInfo>()
         val assetsArray = entry.optJSONArray("assets")
         if (assetsArray != null) {
             for (i in 0 until assetsArray.length()) {
-                val assetObj = assetsArray.getJSONObject(i)
-                val downloadUrl = assetObj.optString("browser_download_url")
-                    .takeIf { it.isNotBlank() } ?: continue
-                assetList.add(
-                    AssetInfo(
-                        name = assetObj.optString("name", "unknown"),
-                        downloadUrl = downloadUrl,
-                        size = assetObj.optLong("size", 0L)
-                    )
-                )
+                val a = assetsArray.getJSONObject(i)
+                val downloadUrl = a.optString("browser_download_url").takeIf { it.isNotBlank() } ?: continue
+                assetList.add(AssetInfo(
+                    name = a.optString("name", "unknown"),
+                    downloadUrl = downloadUrl,
+                    size = a.optLong("size", 0L)
+                ))
             }
         }
         return LatestVersionData(version = version, url = url, date = date, assets = assetList)

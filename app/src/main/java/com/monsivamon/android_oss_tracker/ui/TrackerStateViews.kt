@@ -23,21 +23,12 @@ fun UnsupportedTracker(metaData: RepoMetaData) {
 /** Loading indicator displayed while metadata is being fetched. */
 @Composable
 fun LoadingTracker(metaData: RepoMetaData) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(16.dp)
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(24.dp),
-            strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.primary
-        )
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(16.dp)) {
+        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = "Loading ${metaData.appName}...",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Loading ${metaData.appName}...", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -47,38 +38,24 @@ fun ErroredTracker(metaData: RepoMetaData) {
     val showErrors = remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(16.dp)) {
-        Text(
-            text = metaData.repoUrl,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(end = 48.dp)
-        )
-
+        Text(metaData.repoUrl, style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 48.dp))
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedButton(
-            onClick = { showErrors.value = !showErrors.value },
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text(text = if (showErrors.value) "Hide Details" else "View Errors")
+        OutlinedButton(onClick = { showErrors.value = !showErrors.value },
+            shape = RoundedCornerShape(8.dp)) {
+            Text(if (showErrors.value) "Hide Details" else "View Errors")
         }
 
         if (showErrors.value) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
+            Surface(modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(8.dp)
-            ) {
+                shape = RoundedCornerShape(8.dp)) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    metaData.errors.forEach { errorMsg ->
-                        Text(
-                            text = "• $errorMsg",
-                            style = MaterialTheme.typography.bodySmall,
+                    metaData.errors.forEach { err ->
+                        Text("• $err", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
+                            modifier = Modifier.padding(vertical = 2.dp))
                     }
                 }
             }

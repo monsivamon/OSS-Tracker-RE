@@ -10,10 +10,10 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 ## 🎥 Screenshots
 
 <p align="center">
-  <img src="screenshot/Apps.png"         alt="Apps"          width="24%" />
-  <img src="screenshot/New.png"          alt="New Tracker"   width="24%" />
-  <img src="screenshot/History_Tab.png"  alt="History"       width="24%" />
-  <img src="screenshot/Setting.png"      alt="Settings"      width="24%" />
+  <img src="screenshots/Apps_v0.2.1.png"      alt="Apps"          width="24%" />
+  <img src="screenshots/New_v0.2.1.png"        alt="New Tracker"   width="24%" />
+  <img src="screenshots/History_v0.2.1.png"    alt="History"       width="24%" />
+  <img src="screenshots/Setting_v0.2.1.png"    alt="Settings"      width="24%" />
 </p>
 
 ## ✨ Features
@@ -22,19 +22,19 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 APKs are fetched by a dedicated foreground service. **Real‑time progress** is displayed (file name, percentage, and a progress bar). You can **pause, resume, or cancel** downloads whenever you want.
 
 ### ⚡ One‑tap install
-When a download completes, a **“Tap to install”** button appears inside the repository card. Tap it, and the system package installer takes over.
+When a download completes, a **"Tap to install"** button appears inside the repository card. Tap it, and the system package installer takes over.
 
 ### 🔍 Smart filtering
-Instantly search through your tracked repositories from the Apps screen.
+Instantly search through your tracked repositories from the Apps screen. A clear button resets the filter in one tap.
 
 ### 🌓 Theme support
-Choose between **Light**, **Dark**, or **System** theme. Your preference is saved automatically.
+Choose between **Light**, **Dark**, or **System** theme via a segmented control. Your preference is saved automatically.
 
 ### 📂 Import / Export
 Back up or migrate your list of tracked repositories as a plain text file.
 
 ### 📋 Download history
-The **History** tab records every download — successful or failed — so you always know what you installed and when.
+The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), and detailed error descriptions.
 
 ### 🔄 Reset function
 One button erases all application data, restarts the app, and returns it to a factory‑fresh state.

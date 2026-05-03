@@ -14,8 +14,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 
 /**
- * Displays an "About" dialog with the app version, developer credits,
- * and a link to the project's public repository.
+ * Displays application metadata, developer credits, and a link to the
+ * project's source‑code repository.
  */
 @Composable
 fun AboutAppDialog() {
@@ -23,17 +23,12 @@ fun AboutAppDialog() {
     val ctx = LocalContext.current
 
     FilledTonalButton(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(12.dp),
         onClick = { showDialog.value = true }
     ) {
-        Text(
-            text = "About App",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
+        Text("About App", style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(vertical = 4.dp))
     }
 
     if (showDialog.value) {
@@ -46,82 +41,44 @@ fun AboutAppDialog() {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "OSS Tracker RE",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "v0.2.0",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("OSS Tracker RE", style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("v0.2.1", style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "This is an application for tracking and downloading the latest APKs from open-source software (GitHub, GitLab).",
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Text("Track and download the latest APKs from open‑source projects on GitHub and GitLab.",
+                        textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface)
 
                     Spacer(modifier = Modifier.height(24.dp))
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = "Developer",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "monsivamon",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                        Text("Developer", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text("monsivamon", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface)
 
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = "Original Author",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "jroddev",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Text("Original Author", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text("jroddev", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-
                     Button(
                         onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                "https://github.com/monsivamon/OSS-Tracker-RE".toUri()
-                            )
+                            val intent = Intent(Intent.ACTION_VIEW,
+                                "https://github.com/monsivamon/OSS-Tracker-RE".toUri())
                             ctx.startActivity(intent)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Source Code (GitHub)")
-                    }
+                    ) { Text("Source Code (GitHub)") }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showDialog.value = false }) {
-                    Text("Close")
-                }
+                TextButton(onClick = { showDialog.value = false }) { Text("Close") }
             }
         )
     }

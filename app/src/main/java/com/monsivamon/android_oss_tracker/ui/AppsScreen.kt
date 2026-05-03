@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,8 +21,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Main screen presenting the list of repositories the user is currently tracking.
- * Includes a real-time text filter for quickly locating repositories by URL.
+ * Primary screen listing every repository the user is currently tracking.
+ *
+ * A real‑time text filter with a clear button allows rapid narrowing of the
+ * list, and every tracked item is rendered as a card that supports refresh
+ * and delete actions.
  */
 @Composable
 fun AppsScreen() {
@@ -50,10 +55,7 @@ fun AppsScreen() {
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(verticalScroll)
-            .padding(horizontal = 16.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(verticalScroll).padding(horizontal = 16.dp)
     ) {
         Text(
             text = "Application Trackers",
@@ -61,19 +63,24 @@ fun AppsScreen() {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp)
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
         )
 
-        // Search/filter input
+        // Search / filter with clear button
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             placeholder = { Text("Filter repositories…") },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.dp),
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Clear filter")
+                    }
+                }
+            }
         )
 
         val filteredUrls = if (searchQuery.isBlank()) repoUrls
@@ -85,16 +92,11 @@ fun AppsScreen() {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp)
             )
         } else {
             filteredUrls.forEach { url ->
-                RenderItem(
-                    repoUrl = url,
-                    onDelete = onTrackerDelete
-                )
+                RenderItem(repoUrl = url, onDelete = onTrackerDelete)
                 Spacer(modifier = Modifier.height(12.dp))
             }
             Spacer(modifier = Modifier.height(24.dp))
