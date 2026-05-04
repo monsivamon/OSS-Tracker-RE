@@ -11,6 +11,8 @@ import org.json.JSONObject
  */
 class GitLab : CommonRepo() {
 
+    override val providerName = "GitLab"
+
     override fun getUrlOfRawFile(
         org: String, app: String, branch: String, filepath: String
     ): String = "https://gitlab.com/$org/$app/-/raw/$branch/$filepath"

@@ -2,31 +2,22 @@
 //  OSS Tracker RE — Application build configuration
 // ──────────────────────────────────────────────────────
 //
-//  This script fully composes the APK that is published to
-//  Google Play.  Every declared dependency, feature flag,
-//  and build type is documented inline to serve as a
-//  self-contained reference for new contributors.
+//  Gradle script for assembling the APK that is published
+//  to GitHub Releases.  Every dependency version is pinned
+//  so that builds are deterministic across machines and CI.
 // ──────────────────────────────────────────────────────
 
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    // Generates license information pages and embeds open-source
-    // attribution data directly into the APK.  The plugin is
-    // declared here and applied automatically — no `apply plugin`
-    // line is needed (and adding it would cause a deprecation
-    // warning in Gradle 8.x).
+    // Embeds open-source license information directly into the APK.
     id "com.jaredsburrows.license" version "0.9.0"
 }
 
-// ──────────────────────────────────────────────────────
-//  Secrets & environment
-// ──────────────────────────────────────────────────────
-//  The GitHub API token is injected from local.properties
-//  (which is excluded from Git via .gitignore) so that
-//  CI workflows can supply their own token without modifying
-//  the build script.
-// ──────────────────────────────────────────────────────
+// ── Secrets ─────────────────────────────────────────────
+// The GitHub API token is injected from local.properties
+// (excluded from Git) so that every developer can supply
+// their own token without modifying this script.
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
@@ -36,15 +27,13 @@ if (localPropertiesFile.exists()) {
 }
 def githubToken = localProperties.getProperty('GITHUB_TOKEN', '')
 
-// ──────────────────────────────────────────────────────
-//  Android core configuration
-// ──────────────────────────────────────────────────────
+// ── Android configuration ──────────────────────────────
 android {
     namespace 'com.monsivamon.android_oss_tracker'
     compileSdk 34
 
     buildFeatures {
-        buildConfig true   // Exposes BuildConfig.GITHUB_TOKEN to the app
+        buildConfig true   // Exposes BuildConfig.GITHUB_TOKEN
         compose true       // Enables the Compose compiler plugin
     }
 
@@ -52,31 +41,22 @@ android {
         applicationId "com.monsivamon.android_oss_release_tracker"
         minSdk 27
         targetSdk 34
-        versionCode 8
-        versionName "0.2.1"
+        versionCode 9
+        versionName "0.2.2"
 
-        // Expose the GitHub token as a compile-time constant.
-        // The value is only available in the BuildConfig class
-        // and is not written to any shared preference.
         buildConfigField "String", "GITHUB_TOKEN", "\"${githubToken}\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary true
-        }
+        vectorDrawables { useSupportLibrary true }
     }
 
     buildTypes {
         release {
-            // R8 is disabled for now because the APK is small and
-            // side-effects with Arrow or Volley are not yet fully
-            // verified.  It will be enabled before the first
-            // production release.
+            // R8 is currently disabled.  It will be enabled before
+            // the first production release.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
-            // Signing is handled via the environment on CI;
-            // debug keystore is used for local release builds.
             signingConfig signingConfigs.debug
         }
     }
@@ -86,65 +66,59 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = '17'
-    }
+    kotlinOptions { jvmTarget = '17' }
 
     composeOptions {
-        // Keep the Compose compiler version in sync with the
-        // kotlinCompilerExtensionVersion listed in the
-        // Kotlin-Compose compatibility map.
+        // Keep in sync with the Kotlin–Compose compatibility map.
         kotlinCompilerExtensionVersion '1.5.8'
     }
 
     packaging {
         resources {
-            // Exclude duplicate license files that are shipped
-            // by multiple libraries.
+            // Remove duplicate license files shipped by libraries.
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
 }
 
-// ──────────────────────────────────────────────────────
-//  Dependencies
-// ──────────────────────────────────────────────────────
-//  Every dependency is explicitly declared with a fixed
-//  version (no dynamic ranges) to guarantee reproducible
-//  builds across developer machines and CI.
-// ──────────────────────────────────────────────────────
+// ── Dependencies ───────────────────────────────────────
 dependencies {
-    // ── AndroidX Core & Lifecycle ──────────────────────
+    // AndroidX Core & Lifecycle
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.4'
     implementation 'androidx.activity:activity-compose:1.9.1'
 
-    // ── Jetpack Compose ────────────────────────────────
+    // Jetpack Compose
     implementation "androidx.compose.ui:ui:$compose_ui_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_ui_version"
     implementation 'androidx.compose.material3:material3:1.3.0'
+    // Extended icons used for Pause, PlayArrow, KeyboardArrowDown, etc.
+    implementation "androidx.compose.material:material-icons-extended:$compose_ui_version"
 
-    // ── Image Loading (Coil) ───────────────────────────
+    // Image loading
     implementation "io.coil-kt:coil-compose:2.7.0"
 
-    // ── Networking & Functional Programming ────────────
+    // Networking & utilities
     implementation 'com.android.volley:volley:1.2.1'
     implementation "io.arrow-kt:arrow-core:1.2.4"
-
-    // Navigation Compose (kept for potential future use)
     implementation "androidx.navigation:navigation-compose:2.8.3"
-
-    // Kotlin Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
-    // ── Testing (debug & release) ──────────────────────
+    // WorkManager for automatic update checks
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
+
+    // Reorderable – not currently used but kept for easier re‑introduction
+    // implementation 'org.burnoutcrew.composereorderable:reorderable:0.9.6'
+
+    // Testing
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_ui_version"
-
-    // Debug-only Compose tooling
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
-    implementation "androidx.compose.material:material-icons-extended:$compose_ui_version"
 }
+
+// ⚠️  Do not add `apply plugin: "com.jaredsburrows.license"` here.
+// The plugin is already loaded via the `plugins` block above.
+// A second application triggers a Gradle deprecation warning.

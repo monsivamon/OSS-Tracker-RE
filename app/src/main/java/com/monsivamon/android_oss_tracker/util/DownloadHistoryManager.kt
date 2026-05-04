@@ -7,14 +7,15 @@ import org.json.JSONObject
 /**
  * A single entry in the download history.
  *
- * @property assetName       The file name of the downloaded asset.
+ * @property assetName       File name of the downloaded asset.
  * @property repoName        Human‑readable repository name.
  * @property downloadUrl     Full URL used for the download.
  * @property timestampMillis Epoch millis when the download completed.
  * @property success         Whether the download finished without errors.
- * @property releaseType     "Stable" or "Pre-release".
- * @property version         The resolved version string (e.g. "1.24.0").
+ * @property releaseType     “Stable” or “Pre‑release”.
+ * @property version         The resolved version string (e.g. “1.24.0”).
  * @property errorType       Machine‑readable error category (empty on success).
+ * @property provider        The source platform: “GitHub” or “GitLab”.
  */
 data class DownloadHistoryEntry(
     val assetName: String,
@@ -24,11 +25,12 @@ data class DownloadHistoryEntry(
     val success: Boolean,
     val releaseType: String = "Stable",
     val version: String = "",
-    val errorType: String = ""
+    val errorType: String = "",
+    val provider: String = ""
 )
 
 /**
- * Human‑readable error categories used for display in the history UI.
+ * Human‑readable error categories shown in the history UI.
  */
 enum class ErrorType(val label: String, val description: String) {
     CANCELLED("Cancelled", "Download was cancelled or app restarted"),
@@ -85,6 +87,7 @@ object DownloadHistoryManager {
             put("releaseType", entry.releaseType)
             put("version", entry.version)
             put("errorType", entry.errorType)
+            put("provider", entry.provider)
         })
         prefs.edit().putString(KEY_HISTORY, array.toString()).apply()
     }
@@ -103,7 +106,8 @@ object DownloadHistoryManager {
                 success         = obj.getBoolean("success"),
                 releaseType     = obj.optString("releaseType", "Stable"),
                 version         = obj.optString("version", ""),
-                errorType       = obj.optString("errorType", "")
+                errorType       = obj.optString("errorType", ""),
+                provider        = obj.optString("provider", "")
             ))
         }
         return list

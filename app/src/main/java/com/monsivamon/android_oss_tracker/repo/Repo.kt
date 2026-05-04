@@ -4,14 +4,15 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import com.android.volley.RequestQueue
 import arrow.core.Either
+import com.monsivamon.android_oss_tracker.util.AppSettings
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URL
 
 /**
- * Lightweight in‑memory cache for [RepoMetaData] instances.
- * Prevents redundant network requests across UI recompositions.
+ * In‑memory cache that prevents redundant network calls for the same
+ * repository during a single process lifetime.
  */
 object AppCache {
     val cachedRepos = mutableMapOf<String, RepoMetaData>()
@@ -20,7 +21,7 @@ object AppCache {
 /** Lifecycle states for repository metadata retrieval. */
 enum class MetaDataState { Unsupported, Loading, Errored, Loaded }
 
-/** Describes a downloadable file (typically an APK) attached to a release. */
+/** A downloadable file (typically an APK) attached to a release. */
 data class AssetInfo(
     val name: String,
     val downloadUrl: String,
@@ -38,8 +39,10 @@ data class LatestVersionData(
 /**
  * Reactive state and network logic for a single tracked repository.
  *
- * Holds the latest **stable** and **pre‑release** releases independently,
- * so the UI can display both without mixing their assets.
+ * The latest **stable** and **pre‑release** versions are stored
+ * independently so the UI can display both without mixing their
+ * assets.  Whether pre‑releases are fetched is controlled by
+ * [AppSettings.trackPreReleases].
  */
 data class RepoMetaData(
     val repoUrl: String,
@@ -61,9 +64,9 @@ data class RepoMetaData(
     init { state.value = MetaDataState.Loading }
 
     /**
-     * Fetches all releases, then separates the newest stable release
-     * from the newest pre‑release.  Cancels any in‑flight refresh
-     * first so that rapid button presses do not stack network calls.
+     * Fetches all releases, separates stable from pre‑release, and
+     * caches the newest of each.  Pre‑releases are suppressed when
+     * [AppSettings.trackPreReleases] is `false`.
      */
     fun refreshNetwork() {
         state.value = MetaDataState.Loading
@@ -77,7 +80,7 @@ data class RepoMetaData(
                     val stable = all.filter { !isPreRelease(it.version) }
                     val pre    = all.filter { isPreRelease(it.version) }
                     latestRelease.value = stable.firstOrNull()
-                    latestPreRelease.value = pre.firstOrNull()
+                    latestPreRelease.value = if (AppSettings.trackPreReleases) pre.firstOrNull() else null
                     state.value = MetaDataState.Loaded
                 }
                 is Either.Right -> {
@@ -96,27 +99,22 @@ data class RepoMetaData(
 }
 
 /**
- * Contract for a repository hosting provider (GitHub, GitLab, etc.).
+ * Contract for a repository hosting provider (GitHub, GitLab, …).
  */
 interface Repo {
+    /** Human‑readable name of the hosting service, e.g. “GitHub”. */
+    val providerName: String
+
     fun getOrgName(repoUrl: String): String
     fun getApplicationName(repoUrl: String): String
     fun getIconUrl(repoUrl: String, branch: String, androidRoot: String): String
     fun getUrlOfRawFile(org: String, app: String, branch: String, filepath: String): String
 
-    suspend fun fetchBranchName(
-        org: String, app: String, requestQueue: RequestQueue
-    ): Either<String, Error>
+    suspend fun fetchBranchName(org: String, app: String, requestQueue: RequestQueue): Either<String, Error>
+    suspend fun fetchReleases(org: String, app: String, requestQueue: RequestQueue): Either<List<LatestVersionData>, Error>
+    suspend fun tryDetermineAndroidRoot(org: String, app: String, branch: String, requestQueue: RequestQueue): String
 
-    /** Returns all releases, sorted newest first. */
-    suspend fun fetchReleases(
-        org: String, app: String, requestQueue: RequestQueue
-    ): Either<List<LatestVersionData>, Error>
-
-    suspend fun tryDetermineAndroidRoot(
-        org: String, app: String, branch: String, requestQueue: RequestQueue
-    ): String
-
+    /** Resolves the correct [Repo] implementation from a URL. */
     object Helper {
         fun new(repoUrl: String): Repo {
             val host = runCatching { URL(repoUrl).host.lowercase() }.getOrDefault("")
@@ -146,7 +144,7 @@ abstract class CommonRepo : Repo {
 
     private val versionPattern = Regex("v?([0-9]+\\S*)")
 
-    /** Strips an optional leading "v" and returns the first version‑like substring. */
+    /** Strips an optional leading “v” and returns the first version‑like substring. */
     fun cleanVersionName(raw: String): String? =
         versionPattern.find(raw)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 

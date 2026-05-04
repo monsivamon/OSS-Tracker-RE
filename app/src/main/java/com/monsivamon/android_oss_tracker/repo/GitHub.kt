@@ -12,6 +12,8 @@ import org.json.JSONObject
  */
 class GitHub : CommonRepo() {
 
+    override val providerName = "GitHub"
+
     override fun getUrlOfRawFile(
         org: String, app: String, branch: String, filepath: String
     ): String = "https://raw.githubusercontent.com/$org/$app/$branch/$filepath"

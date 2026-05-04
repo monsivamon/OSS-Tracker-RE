@@ -1,7 +1,10 @@
 package com.monsivamon.android_oss_tracker.ui
 
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -13,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -20,41 +25,47 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.monsivamon.android_oss_tracker.OSSApp
 import com.monsivamon.android_oss_tracker.PersistentState
 import com.monsivamon.android_oss_tracker.repo.MetaDataState
 import com.monsivamon.android_oss_tracker.repo.RepoMetaData
+import com.monsivamon.android_oss_tracker.util.AppSettings
 
 /**
  * Preview card for a repository URL that has not yet been added to the
- * tracked list.  Fetches metadata automatically and displays the latest
- * stable release together with the latest pre‑release (if any).
+ * tracked list.  Fetches metadata and displays the latest stable and
+ * pre‑release versions together with their assets.
  *
- * Tapping the **+** icon adds the repository to persistent storage.
+ * Tapping the ⊕ icon adds the repository to persistent storage.
  */
 @Composable
-fun TrackerPreview(
-    repoUrl: String,
-    onAdd: (String, String) -> Unit
-) {
+fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     val requestQueue = remember { OSSApp.requestQueue }
     val metaData = remember { RepoMetaData(repoUrl, requestQueue) }
+    val ctx = LocalContext.current
 
     LaunchedEffect(repoUrl) { metaData.refreshNetwork() }
+    val trackPreReleases = AppSettings.trackPreReleases
+    LaunchedEffect(trackPreReleases) { metaData.refreshNetwork() }
 
     val stable = metaData.latestRelease.value
-    val pre = metaData.latestPreRelease.value
-
+    val pre    = metaData.latestPreRelease.value
     val isValid = remember { mutableStateOf(false) }
-    if (!isValid.value && (stable != null || pre != null)) {
-        isValid.value = true
-    }
+    if (!isValid.value && (stable != null || pre != null)) isValid.value = true
 
     val fallbackText = when (metaData.state.value) {
         MetaDataState.Unsupported -> "<unsupported>"
-        MetaDataState.Loading      -> "<loading>"
-        MetaDataState.Errored      -> "<error>"
-        MetaDataState.Loaded       -> if (stable == null && pre == null) "<no release>" else ""
+        MetaDataState.Loading     -> "<loading>"
+        MetaDataState.Errored     -> "<error>"
+        MetaDataState.Loaded      -> if (stable == null && pre == null) "<no release>" else ""
+    }
+
+    val (providerLabel, providerColor) = when (metaData.repo) {
+        is com.monsivamon.android_oss_tracker.repo.GitHub -> "GitHub" to Color(0xFF24292F)
+        is com.monsivamon.android_oss_tracker.repo.GitLab -> "GitLab" to Color(0xFFE24329)
+        else -> "" to Color.Transparent
     }
 
     ElevatedCard(
@@ -62,111 +73,81 @@ fun TrackerPreview(
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.Top,
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(16.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = metaData.appName,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+
+                // Repository name + provider badge
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        metaData.appName, style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (providerLabel.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            Modifier.clip(RoundedCornerShape(4.dp)).background(providerColor)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(providerLabel, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // ── Stable Release ─────────────────────
-                if (stable != null) {
-                    Text(
-                        text = "Stable Release",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                // Stable release info
+                stable?.let { s ->
+                    Text("Stable Release", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(6.dp)
+                        Box(
+                            Modifier.clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .clickable { openInBrowser(ctx, s.url) }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = stable.version,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Text(s.version, style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Medium)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stable.date,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(s.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (stable.assets.isNotEmpty()) {
-                        Text(
-                            text = "Available files:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        stable.assets.forEach { asset ->
-                            Text(
-                                text = "• ${asset.name}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp, start = 8.dp)
-                            )
-                        }
+                    if (s.assets.isNotEmpty()) {
+                        Text("Available files:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        s.assets.forEach { Text("• ${it.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, start = 8.dp)) }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // ── Pre‑release ────────────────────────
-                if (pre != null) {
-                    Text(
-                        text = "Pre‑release",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                // Pre-release info
+                pre?.let { p ->
+                    Text("Pre‑release", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(6.dp)
+                        Box(
+                            Modifier.clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.tertiaryContainer)
+                                .clickable { openInBrowser(ctx, p.url) }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = pre.version,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Text(p.version, style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer, fontWeight = FontWeight.Medium)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = pre.date,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(p.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (pre.assets.isNotEmpty()) {
-                        Text(
-                            text = "Available files:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        pre.assets.forEach { asset ->
-                            Text(
-                                text = "• ${asset.name}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp, start = 8.dp)
-                            )
-                        }
+                    if (p.assets.isNotEmpty()) {
+                        Text("Available files:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        p.assets.forEach { Text("• ${it.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, start = 8.dp)) }
                     }
                 }
 
                 if (stable == null && pre == null && metaData.state.value == MetaDataState.Loaded) {
-                    Text(text = fallbackText, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(fallbackText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -174,93 +155,76 @@ fun TrackerPreview(
                 enabled = isValid.value,
                 onClick = { onAdd(repoUrl, metaData.appName) },
                 modifier = Modifier.padding(start = 16.dp).size(48.dp)
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Repository")
-            }
+            ) { Icon(Icons.Default.Add, "Add Repository") }
         }
     }
 }
 
+private fun openInBrowser(context: Context, url: String) {
+    if (url.isNotBlank()) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) { }
+    }
+}
+
 /**
- * Screen where the user enters a GitHub / GitLab repository URL, tests it
- * against the API, and optionally adds it to the tracked list.
+ * Screen where the user enters a GitHub / GitLab URL, tests it against the
+ * API, and optionally adds it to the tracked list.
  */
 @Composable
-fun NewTrackerScreen() {
+fun NewTrackerScreen(onNewTrackerAdded: (() -> Unit)? = null) {
     val ctx = LocalContext.current
-    val sharedPreferences = remember {
-        ctx.getSharedPreferences(PersistentState.STATE_FILENAME, Context.MODE_PRIVATE)
-    }
-    val focusManager = LocalFocusManager.current
-    val repoInputBox = remember { mutableStateOf("") }
-    val isTested = remember { mutableStateOf(false) }
+    val sharedPrefs = remember { ctx.getSharedPreferences(PersistentState.STATE_FILENAME, Context.MODE_PRIVATE) }
+    val focus = LocalFocusManager.current
+    val url = remember { mutableStateOf("") }
+    val tested = remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text(
-            text = "Add a new App Tracker",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
-        )
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Text("Add a new App Tracker", style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp))
 
         OutlinedTextField(
-            value = repoInputBox.value,
-            onValueChange = {
-                repoInputBox.value = it.trim()
-                isTested.value = false
-            },
+            value = url.value,
+            onValueChange = { url.value = it.trim(); tested.value = false },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Project Repository URL") },
             placeholder = { Text("https://github.com/monsivamon/OSS-Tracker-RE") },
             shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Done,
-                keyboardType = KeyboardType.Uri
-            ),
-            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done, keyboardType = KeyboardType.Uri),
+            keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
             singleLine = true,
             trailingIcon = {
-                if (repoInputBox.value.isNotEmpty()) {
-                    IconButton(onClick = {
-                        repoInputBox.value = ""
-                        isTested.value = false
-                        focusManager.clearFocus()
-                    }) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Clear text")
+                if (url.value.isNotEmpty()) {
+                    IconButton(onClick = { url.value = ""; tested.value = false; focus.clearFocus() }) {
+                        Icon(Icons.Default.Close, "Clear text")
                     }
                 }
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
 
-        if (isTested.value) {
+        if (tested.value) {
             TrackerPreview(
-                repoUrl = repoInputBox.value,
-                onAdd = { repo, appName ->
-                    PersistentState.addTracker(ctx, sharedPreferences, appName, repo)
-                    Toast.makeText(ctx, "Added $appName to your trackers", Toast.LENGTH_LONG).show()
-                    repoInputBox.value = ""
-                    isTested.value = false
+                repoUrl = url.value,
+                onAdd = { repo, name ->
+                    PersistentState.addTracker(sharedPrefs, repo)
+                    Toast.makeText(ctx, "Added $name to your trackers", Toast.LENGTH_LONG).show()
+                    url.value = ""
+                    tested.value = false
+                    onNewTrackerAdded?.invoke()
                 }
             )
         }
 
-        Spacer(modifier = Modifier.weight(1.0f))
+        Spacer(Modifier.weight(1f))
 
         Button(
-            onClick = {
-                if (repoInputBox.value.isNotBlank()) {
-                    isTested.value = true
-                    focusManager.clearFocus()
-                }
-            },
+            onClick = { if (url.value.isNotBlank()) { tested.value = true; focus.clearFocus() } },
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp).height(56.dp),
             shape = RoundedCornerShape(12.dp)
-        ) {
-            Text(text = "Test Repository", style = MaterialTheme.typography.titleMedium)
-        }
+        ) { Text("Test Repository", style = MaterialTheme.typography.titleMedium) }
     }
 }

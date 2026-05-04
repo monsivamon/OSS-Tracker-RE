@@ -43,7 +43,7 @@ fun AboutAppDialog() {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("OSS Tracker RE", style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("v0.2.1", style = MaterialTheme.typography.labelLarge,
+                    Text("v0.2.2", style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     Spacer(modifier = Modifier.height(16.dp))

@@ -10,10 +10,10 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 ## 🎥 Screenshots
 
 <p align="center">
-  <img src="screenshots/Apps_v0.2.1.png"      alt="Apps"          width="24%" />
-  <img src="screenshots/New_v0.2.1.png"        alt="New Tracker"   width="24%" />
-  <img src="screenshots/History_v0.2.1.png"    alt="History"       width="24%" />
-  <img src="screenshots/Setting_v0.2.1.png"    alt="Settings"      width="24%" />
+  <img src="screenshots/Apps_v0.2.2.png"      alt="Apps"          width="24%" />
+  <img src="screenshots/New_v0.2.2.png"        alt="New Tracker"   width="24%" />
+  <img src="screenshots/History_v0.2.2.png"    alt="History"       width="24%" />
+  <img src="screenshots/Setting_v0.2.2.png"    alt="Settings"      width="24%" />
 </p>
 
 ## ✨ Features
@@ -21,8 +21,14 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 ### 📦 Fast download engine
 APKs are fetched by a dedicated foreground service. **Real‑time progress** is displayed (file name, percentage, and a progress bar). You can **pause, resume, or cancel** downloads whenever you want.
 
-### ⚡ One‑tap install
-When a download completes, a **"Tap to install"** button appears inside the repository card. Tap it, and the system package installer takes over.
+### ⚡ One‑tap install — or download only
+When a download completes, a **"Tap to install"** button appears inside the repository card. Prefer to install manually? Switch to **Download Only** mode in Settings — APKs land straight in your device's Downloads folder.
+
+### 🔔 Auto update check
+The app periodically checks all tracked repositories for new stable releases and notifies you when one is found. Enabled by default (every 24 hours), with a simple on/off toggle in Settings.
+
+### 🏷️ Stable & Pre‑release separated
+Each repository shows its latest stable and pre‑release versions in separate, collapsible cards, complete with release dates. Toggle pre‑release tracking on or off in Settings.
 
 ### 🔍 Smart filtering
 Instantly search through your tracked repositories from the Apps screen. A clear button resets the filter in one tap.
@@ -34,18 +40,18 @@ Choose between **Light**, **Dark**, or **System** theme via a segmented control.
 Back up or migrate your list of tracked repositories as a plain text file.
 
 ### 📋 Download history
-The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), and detailed error descriptions.
+The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab).
 
 ### 🔄 Reset function
 One button erases all application data, restarts the app, and returns it to a factory‑fresh state.
 
 ## 🚀 Usage
 
-1. **Add a repository** – Go to the **New** tab, enter a GitHub or GitLab URL, and tap **Test Repository**.
-2. **Start tracking** – Tap the **+** button to add it to your list.
+1. **Add a repository** – Tap the **+ Add** button on the Apps screen, enter a GitHub or GitLab URL, and tap **Test Repository**. (The New tab can be re‑enabled from Settings if you prefer the old layout.)
+2. **Start tracking** – Tap the **+** icon on the preview card to add it to your list.
 3. **Download** – On the **Apps** tab, tap **Download** on any asset. Progress is shown in real time — pause or resume as needed.
-4. **Install** – After the download finishes, tap **Tap to install**.
-5. **Manage** – Use the refresh icon to check for new releases. Import or export your list from the Settings screen.
+4. **Install** – After the download finishes, tap **Tap to install** (or find the APK in your Downloads folder if you're using Download Only mode).
+5. **Manage** – Use the refresh icon to check for new releases. Import or export your list from the Settings screen. Drag cards with the ↑↓ arrows to reorder them.
 
 ## 🏆 Credits
 

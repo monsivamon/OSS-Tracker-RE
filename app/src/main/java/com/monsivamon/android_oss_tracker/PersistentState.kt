@@ -2,89 +2,73 @@ package com.monsivamon.android_oss_tracker
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.widget.Toast
 
 /**
- * Manages the persistent storage of tracked repository URLs using SharedPreferences.
- * Provides utility functions to add, retrieve, and remove trackers.
+ * PersistentState manages a list of tracked repository URLs that survives
+ * process restarts.  The list is stored both as a keyed set and as an
+ * explicit order so that drag‑and‑drop reordering can be preserved.
+ *
+ * When the stored list is empty — for example after a factory reset or on
+ * first launch — a default set of repositories is automatically seeded.
  */
 object PersistentState {
+    const val STATE_FILENAME = "app_trackers"
+    private const val KEY_REPO_URLS = "repo_urls"
+    private const val KEY_ORDER = "repo_order"
 
-    const val STATE_FILENAME = "PersistedState"
-    private const val APP_TRACKERS = "app_trackers"
+    /** Default repositories that are automatically added when the list is empty. */
+    private val DEFAULT_REPOS = listOf("https://github.com/monsivamon/OSS-Tracker-RE")
 
-    // The default repository loaded when the app is installed for the first time.
-    private val defaultTrackers = setOf("https://github.com/monsivamon/OSS-Tracker-RE")
-
-    /**
-     * Retrieves the current set of saved repository URLs.
-     * * @param sharedPreferences The SharedPreferences instance.
-     * @return A set of repository URLs. Returns the default tracker if none exist.
-     */
-    fun getSavedTrackers(sharedPreferences: SharedPreferences): Set<String> {
-        return sharedPreferences.getStringSet(APP_TRACKERS, defaultTrackers) ?: defaultTrackers
+    fun initializeDefaultTrackers(prefs: SharedPreferences) {
+        val existing = prefs.getStringSet(KEY_REPO_URLS, emptySet())
+        if (existing.isNullOrEmpty()) {
+            prefs.edit().putStringSet(KEY_REPO_URLS, DEFAULT_REPOS.toSet()).apply()
+            saveOrder(prefs, DEFAULT_REPOS)
+        }
     }
 
-    /**
-     * Adds a single repository to the tracked list and displays a confirmation Toast.
-     * * @param ctx The application context for displaying the Toast.
-     * @param sharedPreferences The SharedPreferences instance.
-     * @param appName The human-readable name of the application.
-     * @param repo The GitHub/GitLab repository URL to add.
-     */
-    fun addTracker(ctx: Context, sharedPreferences: SharedPreferences, appName: String, repo: String) {
-        val existing = sharedPreferences.getStringSet(APP_TRACKERS, defaultTrackers) ?: defaultTrackers
-        val newList = existing.toMutableSet()
-
-        newList.add(repo)
-        newList.remove("") // Ensure no empty strings are persisted
-
-        sharedPreferences.edit().putStringSet(APP_TRACKERS, newList).apply()
-        Toast.makeText(ctx, "Added $appName to your trackers", Toast.LENGTH_LONG).show()
+    fun getSavedTrackers(prefs: SharedPreferences): List<String> {
+        val order = prefs.getString(KEY_ORDER, null)
+        if (!order.isNullOrBlank()) return order.split(",").filter { it.isNotBlank() }
+        val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet()) ?: emptySet()
+        return urls.sortedByDescending { it.lowercase() }
     }
 
-    /**
-     * Bulk adds a list of repositories to the tracked list and displays a confirmation Toast.
-     * * @param ctx The application context for displaying the Toast.
-     * @param sharedPreferences The SharedPreferences instance.
-     * @param repos A list of repository URLs to add.
-     */
-    fun addTrackers(ctx: Context, sharedPreferences: SharedPreferences, repos: List<String>) {
-        val existing = sharedPreferences.getStringSet(APP_TRACKERS, defaultTrackers) ?: defaultTrackers
-        val newList = existing.toMutableSet()
-
-        newList.addAll(repos)
-
-        sharedPreferences.edit().putStringSet(APP_TRACKERS, newList).apply()
-        Toast.makeText(ctx, "Added ${repos.size} trackers", Toast.LENGTH_LONG).show()
+    fun addTracker(prefs: SharedPreferences, repoUrl: String) {
+        val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (urls.add(repoUrl)) {
+            prefs.edit().putStringSet(KEY_REPO_URLS, urls).apply()
+            val current = getSavedTrackers(prefs).toMutableList()
+            if (!current.contains(repoUrl)) { current.add(0, repoUrl); saveOrder(prefs, current) }
+        }
     }
 
-    /**
-     * Removes a specific repository from the tracked list and displays a confirmation Toast.
-     * * @param ctx The application context for displaying the Toast.
-     * @param sharedPreferences The SharedPreferences instance.
-     * @param appName The human-readable name of the application.
-     * @param repo The GitHub/GitLab repository URL to remove.
-     */
-    fun removeTracker(ctx: Context, sharedPreferences: SharedPreferences, appName: String, repo: String) {
-        val existing = sharedPreferences.getStringSet(APP_TRACKERS, defaultTrackers) ?: defaultTrackers
-        val newList = existing.toMutableSet()
-
-        newList.remove(repo)
-
-        sharedPreferences.edit().putStringSet(APP_TRACKERS, newList).apply()
-        Toast.makeText(ctx, "Deleted $appName from your trackers", Toast.LENGTH_LONG).show()
+    fun removeTracker(prefs: SharedPreferences, repoUrl: String) {
+        val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (urls.remove(repoUrl)) {
+            prefs.edit().putStringSet(KEY_REPO_URLS, urls).apply()
+            val current = getSavedTrackers(prefs).toMutableList(); current.remove(repoUrl); saveOrder(prefs, current)
+        }
     }
 
-    /**
-     * Clears all tracked repositories, resetting the storage to an empty state.
-     * * @param ctx The application context for displaying the Toast.
-     * @param sharedPreferences The SharedPreferences instance.
-     */
-    fun removeAllTrackers(ctx: Context, sharedPreferences: SharedPreferences) {
-        val emptyList = emptySet<String>()
+    fun addTrackers(prefs: SharedPreferences, lines: List<String>) {
+        val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        val current = getSavedTrackers(prefs).toMutableList()
+        var changed = false
+        lines.forEach { line ->
+            if (line.isNotBlank() && urls.add(line.trim())) {
+                changed = true
+                if (!current.contains(line)) { current.add(0, line); saveOrder(prefs, current) }
+            }
+        }
+        if (changed) prefs.edit().putStringSet(KEY_REPO_URLS, urls).apply()
+    }
 
-        sharedPreferences.edit().putStringSet(APP_TRACKERS, emptyList).apply()
-        Toast.makeText(ctx, "Deleted all trackers", Toast.LENGTH_LONG).show()
+    fun removeAllTrackers(prefs: SharedPreferences) {
+        prefs.edit().remove(KEY_REPO_URLS).remove(KEY_ORDER).apply()
+    }
+
+    fun saveOrder(prefs: SharedPreferences, orderedUrls: List<String>) {
+        prefs.edit().putString(KEY_ORDER, orderedUrls.joinToString(",")).apply()
     }
 }

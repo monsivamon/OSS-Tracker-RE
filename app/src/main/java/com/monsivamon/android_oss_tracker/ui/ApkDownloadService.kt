@@ -3,11 +3,13 @@ package com.monsivamon.android_oss_tracker.ui
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Environment
 import android.os.IBinder
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -17,6 +19,7 @@ import com.monsivamon.android_oss_tracker.util.DownloadStateManager
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadProgress
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStatus
 import com.monsivamon.android_oss_tracker.util.ErrorType
+import com.monsivamon.android_oss_tracker.util.AppSettings
 import kotlinx.coroutines.*
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -28,12 +31,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Foreground service that downloads APK binaries in the background.
+ * Foreground service that performs APK downloads.
  *
- * Supports **pause**, **resume**, and **cancel** per download URL.
- * Progress is published exclusively via [DownloadStateManager]; the
- * system notification is kept minimal and is dismissed automatically
- * once all transfers complete.
+ * Supports pause / resume / cancel, writes the file to the public Downloads
+ * folder when “Download Only” mode is active, and records detailed history
+ * entries including the hosting provider, release type, and error category.
  */
 class ApkDownloadService : Service() {
 
@@ -50,19 +52,12 @@ class ApkDownloadService : Service() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
-    /** Number of currently active (non‑paused) transfers. */
     private val activeDownloadCount = AtomicInteger(0)
-
-    /** In‑flight HTTP calls keyed by download URL. */
     private val activeCalls = ConcurrentHashMap<String, Call>()
-
-    /** Metadata preserved for pause / resume. */
     private val pausedJobs = ConcurrentHashMap<String, PausedJobData>()
-
-    /** Marks URLs that were explicitly paused by the user. */
     private val pausedByUser = ConcurrentHashMap<String, Boolean>()
 
-    /** Shared OkHttp client, lazily created on a background thread. */
+    /** Shared OkHttp client, created lazily on a background thread. */
     private val client by lazy {
         runBlocking(Dispatchers.IO) {
             OkHttpClient.Builder()
@@ -77,7 +72,8 @@ class ApkDownloadService : Service() {
         val bytesDownloaded: Long,
         val repoName: String,
         val releaseType: String,
-        val releaseVersion: String
+        val releaseVersion: String,
+        val provider: String
     )
 
     override fun onCreate() {
@@ -86,18 +82,19 @@ class ApkDownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action      = intent?.action ?: ""
-        val downloadUrl = intent?.getStringExtra("DOWNLOAD_URL") ?: ""
-        val fileName    = intent?.getStringExtra("FILE_NAME") ?: "update.apk"
-        val repoName    = intent?.getStringExtra("REPO_NAME") ?: "Unknown"
-        val releaseType = intent?.getStringExtra("RELEASE_TYPE") ?: "Stable"
-        var releaseVer  = intent?.getStringExtra("RELEASE_VERSION") ?: ""
+        val action       = intent?.action ?: ""
+        val downloadUrl  = intent?.getStringExtra("DOWNLOAD_URL") ?: ""
+        val fileName     = intent?.getStringExtra("FILE_NAME") ?: "update.apk"
+        val repoName     = intent?.getStringExtra("REPO_NAME") ?: "Unknown"
+        val releaseType  = intent?.getStringExtra("RELEASE_TYPE") ?: "Stable"
+        var releaseVer   = intent?.getStringExtra("RELEASE_VERSION") ?: ""
+        val provider     = intent?.getStringExtra("PROVIDER") ?: "Unknown"
 
         if (releaseVer.isBlank()) {
             releaseVer = extractVersionFromUrl(downloadUrl)
         }
 
-        Log.d(TAG, "Starting: $fileName repo=$repoName type=$releaseType ver=$releaseVer")
+        Log.d(TAG, "Starting: $fileName repo=$repoName type=$releaseType ver=$releaseVer provider=$provider")
 
         when {
             downloadUrl.isNullOrEmpty() -> {
@@ -109,22 +106,23 @@ class ApkDownloadService : Service() {
             action == ACTION_PAUSE  -> pauseDownload(downloadUrl)
             action == ACTION_RESUME -> resumeDownload(downloadUrl)
             action == ACTION_CANCEL -> cancelDownload(downloadUrl)
-            else -> startNewDownload(downloadUrl, fileName, repoName, releaseType, releaseVer)
+            else -> startNewDownload(downloadUrl, fileName, repoName, releaseType, releaseVer, provider)
         }
         return START_REDELIVER_INTENT
     }
 
-    // ── Download control ─────────────────────────────────────────
+    // ── Download lifecycle ────────────────────────────────────────
 
     private fun startNewDownload(url: String, fileName: String, repoName: String,
-                                 releaseType: String, releaseVersion: String) {
+                                 releaseType: String, releaseVersion: String, provider: String) {
         DownloadStateManager.updateStatus(url, DownloadStatus.Downloading(DownloadProgress(0, 0)))
         updateForegroundNotification("Downloading …")
         activeDownloadCount.incrementAndGet()
 
         serviceScope.launch {
             try {
-                executeNetworkStream(url, fileName, repoName, 0, false, releaseType, releaseVersion)
+                executeNetworkStream(url, fileName, repoName, 0, false,
+                    releaseType, releaseVersion, provider)
             } finally {
                 if (pausedByUser[url] != true) {
                     if (activeDownloadCount.decrementAndGet() == 0) {
@@ -156,7 +154,7 @@ class ApkDownloadService : Service() {
         serviceScope.launch {
             try {
                 executeNetworkStream(url, paused.fileName, paused.repoName,
-                    paused.bytesDownloaded, true, paused.releaseType, paused.releaseVersion)
+                    paused.bytesDownloaded, true, paused.releaseType, paused.releaseVersion, paused.provider)
             } finally {
                 if (pausedByUser[url] != true) {
                     if (activeDownloadCount.decrementAndGet() == 0) {
@@ -186,12 +184,19 @@ class ApkDownloadService : Service() {
         }
     }
 
-    // ── Core transfer logic ──────────────────────────────────────
+    // ── Network stream ────────────────────────────────────────────
 
+    /**
+     * Downloads the file and writes it to the appropriate location:
+     * - When [AppSettings.installAfterDownload] is true: app‑private external storage.
+     * - When false and API ≥ 29: the public Downloads folder via MediaStore.
+     * - When false and API < 29: the public Downloads folder via direct file access.
+     */
     private suspend fun executeNetworkStream(
         url: String, fileName: String, repoName: String,
         startByte: Long, append: Boolean,
-        releaseType: String, releaseVersion: String
+        releaseType: String, releaseVersion: String,
+        provider: String
     ) {
         val request = Request.Builder().url(url).apply {
             if (startByte > 0) header("Range", "bytes=$startByte-")
@@ -205,14 +210,40 @@ class ApkDownloadService : Service() {
             val body = response.body ?: throw Exception("Empty body")
             val totalBytes = startByte + body.contentLength()
 
-            val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: cacheDir
-            if (!downloadsDir.exists()) downloadsDir.mkdirs()
-            val outputFile = File(downloadsDir, fileName)
+            // Determine output file and stream
+            val outputFile: File
+            val outputStream: FileOutputStream
 
+            if (AppSettings.installAfterDownload) {
+                // App‑specific storage
+                val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: cacheDir
+                if (!dir.exists()) dir.mkdirs()
+                outputFile = File(dir, fileName)
+                outputStream = FileOutputStream(outputFile, append)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Public Downloads via MediaStore (no extra permissions needed)
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    ?: throw Exception("Failed to create MediaStore entry")
+                outputFile = File("") // dummy; the file goes through the content resolver
+                outputStream = contentResolver.openOutputStream(uri, "wa")!! as FileOutputStream
+            } else {
+                // Legacy public storage (API < 29)
+                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!dir.exists()) dir.mkdirs()
+                outputFile = File(dir, fileName)
+                outputStream = FileOutputStream(outputFile, append)
+            }
+
+            // Copy the response body to the output stream
             withContext(Dispatchers.IO) {
-                body.use { rb ->
-                    FileOutputStream(outputFile, append).use { out ->
-                        val input = rb.byteStream()
+                body.use { responseBody ->
+                    outputStream.use { out ->
+                        val input = responseBody.byteStream()
                         var copied = startByte
                         val buf = ByteArray(8 * 1024)
                         var bytes = input.read(buf)
@@ -226,7 +257,9 @@ class ApkDownloadService : Service() {
                                     url, DownloadStatus.Downloading(DownloadProgress(copied, totalBytes)))
                                 lastUpdate = now
                             }
-                            pausedJobs[url] = PausedJobData(fileName, copied, repoName, releaseType, releaseVersion)
+                            pausedJobs[url] = PausedJobData(
+                                fileName, copied, repoName, releaseType, releaseVersion, provider
+                            )
                             bytes = input.read(buf)
                         }
                         DownloadStateManager.updateStatus(
@@ -239,7 +272,9 @@ class ApkDownloadService : Service() {
             DownloadHistoryManager.addEntry(this, DownloadHistoryEntry(
                 assetName = fileName, repoName = repoName, downloadUrl = url,
                 timestampMillis = System.currentTimeMillis(),
-                success = true, releaseType = releaseType, version = releaseVersion))
+                success = true, releaseType = releaseType, version = releaseVersion,
+                provider = provider
+            ))
             DownloadStateManager.updateStatus(url, DownloadStatus.Completed(outputFile))
 
         } catch (e: Exception) {
@@ -250,7 +285,8 @@ class ApkDownloadService : Service() {
                 assetName = fileName, repoName = repoName, downloadUrl = url,
                 timestampMillis = System.currentTimeMillis(),
                 success = false, releaseType = releaseType, version = releaseVersion,
-                errorType = errorType.name))
+                errorType = errorType.name, provider = provider
+            ))
             DownloadStateManager.updateStatus(url, DownloadStatus.Failed(e.message ?: "Unknown error"))
             withContext(Dispatchers.Main) {
                 Toast.makeText(applicationContext, "DL Error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -260,13 +296,17 @@ class ApkDownloadService : Service() {
         }
     }
 
-    // ── Notification helpers ─────────────────────────────────────
+    // ── Notification helpers ──────────────────────────────────────
 
+    /**
+     * Updates (or creates) the foreground notification, ensuring that
+     * the required [ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC] is
+     * supplied on API 29+.
+     */
     private fun updateForegroundNotification(title: String, iconRes: Int = android.R.drawable.stat_sys_download) {
         val notification = buildSimpleNotification(title, iconRes)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(foregroundNotificationId, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(foregroundNotificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(foregroundNotificationId, notification)
         }
@@ -289,12 +329,8 @@ class ApkDownloadService : Service() {
     }
 
     /**
-     * Fallback that extracts a version number from the download URL.
-     *
-     * Supported patterns:
-     * - `/releases/download/v1.2.3/...`
-     * - `/releases/tag/v1.2.3`
-     * - File name segment containing a version (e.g. `microg-6.1.4.apk`)
+     * Fallback that extracts a version number from a download URL.
+     * Supports common GitHub / GitLab URL patterns.
      */
     private fun extractVersionFromUrl(url: String): String {
         Regex("/releases/download/(v?[0-9]+[^/]*)").find(url)?.let { return it.groupValues[1] }

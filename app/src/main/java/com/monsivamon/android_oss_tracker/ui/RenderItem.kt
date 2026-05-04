@@ -2,13 +2,12 @@ package com.monsivamon.android_oss_tracker.ui
 
 import android.content.Intent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -25,43 +24,40 @@ import com.monsivamon.android_oss_tracker.util.DownloadStateManager
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStatus
 
 /**
- * Elevated card representing one tracked repository.
+ * Flat card representing one tracked repository.
  *
- * Tapping the refresh icon cancels any in‑flight downloads for this
- * repository, resets completed / failed assets to Idle, and re‑fetches
- * metadata from the network.  The delete icon removes the repository
- * from persistent storage and the in‑memory cache.
+ * Move‑up and move‑down buttons provide reliable reordering.  All elevation
+ * and animated shadows have been removed for a clean look.  The refresh
+ * icon cancels any in‑flight downloads and re‑fetches metadata.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RenderItem(repoUrl: String, onDelete: (String, String) -> Unit) {
+fun RenderItem(
+    repoUrl: String,
+    onDelete: (String, String) -> Unit,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val requestQueue = remember { OSSApp.requestQueue }
     val metaData = remember(repoUrl) {
-        AppCache.cachedRepos.getOrPut(repoUrl) {
-            RepoMetaData(repoUrl, requestQueue).apply { refreshNetwork() }
-        }
+        AppCache.cachedRepos.getOrPut(repoUrl) { RepoMetaData(repoUrl, requestQueue).apply { refreshNetwork() } }
     }
 
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth().animateContentSize(
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMedium
-            )
-        ),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
-        onClick = { /* optional: open in external browser */ }
+    Card(
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        onClick = { }
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(end = 48.dp)) {
+        Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().padding(end = 52.dp)) {
                 Crossfade(
-                    targetState = if (metaData.latestRelease.value != null ||
-                        metaData.latestPreRelease.value != null)
-                        MetaDataState.Loaded else metaData.state.value,
-                    animationSpec = tween(durationMillis = 300),
-                    label = "SmoothStateTransition"
+                    targetState = if (metaData.latestRelease.value != null || metaData.latestPreRelease.value != null) MetaDataState.Loaded else metaData.state.value,
+                    animationSpec = tween(300),
+                    label = "StateTransition"
                 ) { state ->
                     when (state) {
                         MetaDataState.Unsupported -> UnsupportedTracker(metaData)
@@ -72,39 +68,32 @@ fun RenderItem(repoUrl: String, onDelete: (String, String) -> Unit) {
                 }
             }
 
-            Column(
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            // Action buttons (top‑right)
+            Column(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                IconButton(onClick = { onMoveUp(repoUrl) }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.ArrowUpward, "Move up", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                }
+                IconButton(onClick = { onMoveDown(repoUrl) }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.ArrowDownward, "Move down", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                }
                 IconButton(onClick = {
-                    // Cancel / reset all downloads, then re‑fetch metadata
-                    val allAssets = metaData.latestRelease.value?.assets.orEmpty() +
-                            metaData.latestPreRelease.value?.assets.orEmpty()
-                    allAssets.forEach { asset ->
-                        val status = DownloadStateManager.states.value[asset.downloadUrl]
-                        when (status) {
+                    val all = metaData.latestRelease.value?.assets.orEmpty() + metaData.latestPreRelease.value?.assets.orEmpty()
+                    all.forEach { asset ->
+                        when (DownloadStateManager.states.value[asset.downloadUrl]) {
                             is DownloadStatus.Downloading, is DownloadStatus.Paused -> {
-                                val cancelIntent = Intent(context, ApkDownloadService::class.java).apply {
-                                    action = ApkDownloadService.ACTION_CANCEL
-                                    putExtra("DOWNLOAD_URL", asset.downloadUrl)
-                                }
-                                context.startService(cancelIntent)
+                                val i = Intent(context, ApkDownloadService::class.java).apply { action = ApkDownloadService.ACTION_CANCEL; putExtra("DOWNLOAD_URL", asset.downloadUrl) }
+                                context.startService(i)
                             }
-                            is DownloadStatus.Completed, is DownloadStatus.Failed -> {
-                                DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
-                            }
-                            else -> { /* Idle stays untouched */ }
+                            is DownloadStatus.Completed, is DownloadStatus.Failed -> DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
+                            else -> {}
                         }
                     }
                     metaData.refreshNetwork()
-                }) {
-                    Icon(Icons.Default.Refresh, "Refresh Repository",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Refresh, "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 }
-
-                IconButton(onClick = { onDelete(metaData.appName, metaData.repoUrl) }) {
-                    Icon(Icons.Default.Delete, "Delete Tracker",
-                        tint = MaterialTheme.colorScheme.error)
+                IconButton(onClick = { onDelete(metaData.appName, metaData.repoUrl) }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
                 }
             }
         }

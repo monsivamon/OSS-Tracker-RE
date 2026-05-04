@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,24 +18,29 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import com.monsivamon.android_oss_tracker.repo.AssetInfo
 import com.monsivamon.android_oss_tracker.repo.LatestVersionData
 import com.monsivamon.android_oss_tracker.repo.RepoMetaData
+import com.monsivamon.android_oss_tracker.util.AppSettings
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Displays a repository that has been successfully loaded, including
- * separate cards for the latest stable and pre‑release versions.
+ * Displays the metadata and downloadable assets of a repository that has
+ * been successfully fetched.
  *
- * Each card is collapsible and contains per‑asset download controls
- * with pause, resume, cancel, and one‑tap install.
+ * When "Install after download" is disabled in [AppSettings], completed
+ * downloads show a static "Download Done" label instead of the install button.
  */
 @Composable
 fun LoadedTracker(metaData: RepoMetaData) {
@@ -42,52 +48,103 @@ fun LoadedTracker(metaData: RepoMetaData) {
     val coroutineScope = rememberCoroutineScope()
     val allDownloadStates by DownloadStateManager.states.collectAsState()
 
+    // React to changes in the "track pre-releases" setting.
+    val trackPreReleases = AppSettings.trackPreReleases
+    LaunchedEffect(trackPreReleases) { metaData.refreshNetwork() }
+
+    val installAfterDownload = AppSettings.installAfterDownload
+    val provider = metaData.repo.providerName
+    val (providerLabel, providerColor) = when (provider) {
+        "GitHub" -> "GitHub" to Color(0xFF24292F)
+        "GitLab" -> "GitLab" to Color(0xFFE24329)
+        else    -> "" to Color.Transparent
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-        Text(
-            text = metaData.appName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        // Repository name + provider badge
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = metaData.appName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            if (providerLabel.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(8.dp))
+                ProviderBadge(providerLabel, providerColor)
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Stable release card
         metaData.latestRelease.value?.let { release ->
             ReleaseSection(
                 label = "Stable Release",
                 versionData = release,
+                badgeColor = MaterialTheme.colorScheme.secondaryContainer,
+                onBadgeColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 allDownloadStates = allDownloadStates,
-                onDownload = { asset -> startDownload(ctx, metaData.appName, asset, "Stable", release.version) },
-                onPause    = { asset -> pauseDownload(ctx, asset) },
-                onResume   = { asset -> resumeDownload(ctx, asset) },
+                installAfterDownload = installAfterDownload,
+                onDownload = { startDownload(ctx, metaData.appName, it, "Stable", release.version, provider) },
+                onPause    = { pauseDownload(ctx, it) },
+                onResume   = { resumeDownload(ctx, it) },
                 onInstall  = { file, cb -> installApk(ctx, file, coroutineScope, cb) }
             )
         }
 
+        // Pre-release card
         metaData.latestPreRelease.value?.let { pre ->
             ReleaseSection(
                 label = "Pre‑release",
                 versionData = pre,
+                badgeColor = MaterialTheme.colorScheme.tertiaryContainer,
+                onBadgeColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 allDownloadStates = allDownloadStates,
-                onDownload = { asset -> startDownload(ctx, metaData.appName, asset, "Pre-release", pre.version) },
-                onPause    = { asset -> pauseDownload(ctx, asset) },
-                onResume   = { asset -> resumeDownload(ctx, asset) },
+                installAfterDownload = installAfterDownload,
+                onDownload = { startDownload(ctx, metaData.appName, it, "Pre-release", pre.version, provider) },
+                onPause    = { pauseDownload(ctx, it) },
+                onResume   = { resumeDownload(ctx, it) },
                 onInstall  = { file, cb -> installApk(ctx, file, coroutineScope, cb) }
             )
         }
     }
 }
 
-/** A single collapsible release card (Stable or Pre‑release). */
+// ── Internal composables ─────────────────────────────────────────────
+
+@Composable
+private fun ProviderBadge(label: String, color: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(color)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
 @Composable
 private fun ReleaseSection(
     label: String,
     versionData: LatestVersionData,
+    badgeColor: Color,
+    onBadgeColor: Color,
     allDownloadStates: Map<String, DownloadStatus>,
+    installAfterDownload: Boolean,
     onDownload: (AssetInfo) -> Unit,
     onPause: (AssetInfo) -> Unit,
     onResume: (AssetInfo) -> Unit,
     onInstall: (java.io.File, () -> Unit) -> Unit
 ) {
+    val ctx = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
 
     Card(
@@ -96,33 +153,63 @@ private fun ReleaseSection(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
+            // Header – tap to expand / collapse
             Row(
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
-                    Text(label, style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text(versionData.version, style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        label, style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold
+                    )
+                    // Version badge – tap opens release page in browser
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(badgeColor)
+                            .clickable {
+                                if (versionData.url.isNotBlank()) {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, versionData.url.toUri())
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        ctx.startActivity(intent)
+                                    } catch (_: Exception) { /* ignore errors opening the browser */ }
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            versionData.version, style = MaterialTheme.typography.labelLarge,
+                            color = onBadgeColor, fontWeight = FontWeight.Medium
+                        )
+                    }
+                    if (versionData.date.isNotBlank()) {
+                        Text(
+                            versionData.date, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
                 Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand"
                 )
             }
+
+            // Collapsible asset list
             AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     versionData.assets.forEach { asset ->
                         val status = allDownloadStates[asset.downloadUrl]
                         AssetDownloadRow(
-                            asset = asset,
-                            status = status,
-                            onDownload = { onDownload(asset) },
-                            onPause = onPause,
-                            onResume = onResume,
-                            onInstall = onInstall
+                            asset, status, installAfterDownload,
+                            { onDownload(asset) }, onPause, onResume, onInstall
                         )
                     }
                 }
@@ -131,11 +218,11 @@ private fun ReleaseSection(
     }
 }
 
-/** Per‑asset download / pause / resume / install controls. */
 @Composable
 private fun AssetDownloadRow(
     asset: AssetInfo,
     status: DownloadStatus?,
+    installAfterDownload: Boolean,
     onDownload: () -> Unit,
     onPause: (AssetInfo) -> Unit,
     onResume: (AssetInfo) -> Unit,
@@ -153,7 +240,7 @@ private fun AssetDownloadRow(
                 FilledTonalButton(onClick = { onPause(asset) },
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     shape = RoundedCornerShape(12.dp)) {
-                    Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Pause, null, Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Pause")
                 }
@@ -170,26 +257,32 @@ private fun AssetDownloadRow(
                 FilledTonalButton(onClick = { onResume(asset) },
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     shape = RoundedCornerShape(12.dp)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Resume")
                 }
             }
         }
         is DownloadStatus.Completed -> {
-            var installing by remember { mutableStateOf(false) }
-            if (installing) {
-                Text("Installing...", modifier = Modifier.padding(vertical = 8.dp),
-                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
-            } else {
-                Button(onClick = {
-                    installing = true
-                    onInstall(status.apkFile) {
-                        DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
+            if (installAfterDownload) {
+                var installing by remember { mutableStateOf(false) }
+                if (installing) {
+                    Text("Installing...", modifier = Modifier.padding(vertical = 8.dp),
+                        style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    Button(onClick = {
+                        installing = true
+                        onInstall(status.apkFile) {
+                            DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
+                        }
+                    }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                        Text("Tap to install: ${asset.name}")
                     }
-                }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                    Text("Tap to install: ${asset.name}")
                 }
+            } else {
+                Text("Download Done", style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(vertical = 8.dp))
             }
         }
         is DownloadStatus.Failed -> {
@@ -199,18 +292,16 @@ private fun AssetDownloadRow(
         null, is DownloadStatus.Idle -> {
             FilledTonalButton(onClick = onDownload,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                shape = RoundedCornerShape(12.dp)) {
-                Text("Download: ${asset.name}")
-            }
+                shape = RoundedCornerShape(12.dp)) { Text("Download: ${asset.name}") }
         }
     }
 }
 
-// ── Internal helpers ─────────────────────────────────────────────
+// ── Download helpers ──────────────────────────────────────────────────
 
 private fun startDownload(
-    context: android.content.Context, repoName: String,
-    asset: AssetInfo, releaseType: String, releaseVersion: String
+    context: android.content.Context, repoName: String, asset: AssetInfo,
+    releaseType: String, releaseVersion: String, provider: String
 ) {
     val intent = Intent(context, ApkDownloadService::class.java).apply {
         putExtra("DOWNLOAD_URL", asset.downloadUrl)
@@ -218,6 +309,7 @@ private fun startDownload(
         putExtra("REPO_NAME", repoName)
         putExtra("RELEASE_TYPE", releaseType)
         putExtra("RELEASE_VERSION", releaseVersion)
+        putExtra("PROVIDER", provider)
     }
     context.startForegroundService(intent)
     Toast.makeText(context, "Download started...", Toast.LENGTH_SHORT).show()

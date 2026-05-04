@@ -33,7 +33,8 @@ fun RepoListImporter() {
         if (data.isNotEmpty()) {
             scope.launch {
                 withContext(Dispatchers.IO) {
-                    PersistentState.addTrackers(ctx, sharedPreferences, data.lines())
+                    // ★ 修正: 新しいシグネチャ addTrackers(prefs, lines) を使用
+                    PersistentState.addTrackers(sharedPreferences, data.lines())
                     AppCache.cachedRepos.clear()
                 }
                 Toast.makeText(ctx, "Repo list imported successfully", Toast.LENGTH_SHORT).show()
