@@ -12,37 +12,40 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
-import com.monsivamon.android_oss_tracker.BuildConfig
+import com.monsivamon.android_oss_tracker.util.AppSettings
 
 /**
- * A utility object that provides coroutine-based wrappers for Volley network requests.
- * It handles authentication headers globally for GitHub/GitLab API requests.
+ * Utility object providing coroutine‑based wrappers for Volley network requests.
+ *
+ * All HTTP requests automatically carry an `Authorization: Bearer` header
+ * when a GitHub Personal Access Token has been configured in [AppSettings].
  */
 object ApiUtils {
 
-    // Safely loaded from the local.properties file via BuildConfig to prevent token leakage.
-    private val GITHUB_TOKEN = BuildConfig.GITHUB_TOKEN
-
     /**
-     * Generates the required HTTP headers for API authentication.
-     * Injects the GitHub Personal Access Token as a Bearer token if it is configured.
+     * Builds the authentication headers for an API request.
      *
-     * @return A map of header keys and values.
+     * Reads the user‑supplied GitHub token from [AppSettings.githubToken]
+     * and, if it is non‑blank, inserts it as a Bearer token.
+     *
+     * @return A mutable map of header keys and values.
      */
     private fun getAuthHeaders(): MutableMap<String, String> {
         val headers = HashMap<String, String>()
-        if (GITHUB_TOKEN.isNotBlank()) {
-            headers["Authorization"] = "Bearer $GITHUB_TOKEN"
+        val token = AppSettings.githubToken
+        if (token.isNotBlank()) {
+            headers["Authorization"] = "Bearer $token"
         }
         return headers
     }
 
     /**
-     * Executes an HTTP GET request and returns the raw string response.
+     * Performs an HTTP `GET` request and returns the raw response string.
      *
-     * @param url The target API endpoint URL.
-     * @param requestQueue The Volley RequestQueue to handle the network operation.
-     * @return An [Either] containing the raw response String on success (Left), or a VolleyError on failure (Right).
+     * @param url           Target API endpoint.
+     * @param requestQueue  The Volley [RequestQueue] to use.
+     * @return [Either.Left] with the response body on success,
+     *         [Either.Right] with the [VolleyError] on failure.
      */
     suspend fun get(url: String, requestQueue: RequestQueue) = suspendCoroutine<Either<String, VolleyError>> { cont ->
         requestQueue.add(object : StringRequest(
@@ -58,11 +61,12 @@ object ApiUtils {
     }
 
     /**
-     * Executes an HTTP GET request and returns a parsed JSON array.
+     * Performs an HTTP `GET` request and returns a parsed [JSONArray].
      *
-     * @param url The target API endpoint URL.
-     * @param requestQueue The Volley RequestQueue to handle the network operation.
-     * @return An [Either] containing the parsed JSONArray on success (Left), or a VolleyError on failure (Right).
+     * @param url           Target API endpoint.
+     * @param requestQueue  The Volley [RequestQueue] to use.
+     * @return [Either.Left] with the parsed array on success,
+     *         [Either.Right] with the [VolleyError] on failure.
      */
     suspend fun getJsonArray(url: String, requestQueue: RequestQueue) = suspendCoroutine<Either<JSONArray, VolleyError>> { cont ->
         requestQueue.add(object : JsonArrayRequest(
@@ -78,11 +82,12 @@ object ApiUtils {
     }
 
     /**
-     * Executes an HTTP GET request and returns a parsed JSON object.
+     * Performs an HTTP `GET` request and returns a parsed [JSONObject].
      *
-     * @param url The target API endpoint URL.
-     * @param requestQueue The Volley RequestQueue to handle the network operation.
-     * @return An [Either] containing the parsed JSONObject on success (Left), or a VolleyError on failure (Right).
+     * @param url           Target API endpoint.
+     * @param requestQueue  The Volley [RequestQueue] to use.
+     * @return [Either.Left] with the parsed object on success,
+     *         [Either.Right] with the [VolleyError] on failure.
      */
     suspend fun getJsonObject(url: String, requestQueue: RequestQueue) = suspendCoroutine<Either<JSONObject, VolleyError>> { cont ->
         requestQueue.add(object : JsonObjectRequest(

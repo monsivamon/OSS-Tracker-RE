@@ -26,9 +26,13 @@ import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStat
 /**
  * Flat card representing one tracked repository.
  *
- * Move‑up and move‑down buttons provide reliable reordering.  All elevation
- * and animated shadows have been removed for a clean look.  The refresh
- * icon cancels any in‑flight downloads and re‑fetches metadata.
+ * Action buttons in the top‑right corner provide:
+ * - ▲/▼ for reordering,
+ * - A refresh icon that cancels any in‑flight downloads and re‑fetches metadata,
+ * - A delete icon that removes the repository from the list.
+ *
+ * During a pull‑to‑refresh or while metadata is loading, the refresh icon
+ * is replaced by a [CircularProgressIndicator].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +41,8 @@ fun RenderItem(
     onDelete: (String, String) -> Unit,
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
+    /** `true` while the parent screen is performing a pull‑to‑refresh. */
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -53,9 +59,11 @@ fun RenderItem(
         onClick = { }
     ) {
         Box(Modifier.fillMaxWidth()) {
+            // Main content area – the right padding reserves space for the action buttons
             Box(Modifier.fillMaxWidth().padding(end = 52.dp)) {
                 Crossfade(
-                    targetState = if (metaData.latestRelease.value != null || metaData.latestPreRelease.value != null) MetaDataState.Loaded else metaData.state.value,
+                    targetState = if (metaData.latestRelease.value != null || metaData.latestPreRelease.value != null)
+                        MetaDataState.Loaded else metaData.state.value,
                     animationSpec = tween(300),
                     label = "StateTransition"
                 ) { state ->
@@ -68,30 +76,46 @@ fun RenderItem(
                 }
             }
 
-            // Action buttons (top‑right)
+            // Action buttons (top‑right corner)
             Column(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // Move up
                 IconButton(onClick = { onMoveUp(repoUrl) }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.ArrowUpward, "Move up", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 }
+                // Move down
                 IconButton(onClick = { onMoveDown(repoUrl) }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.ArrowDownward, "Move down", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 }
+                // Refresh – shows a spinner while the repository is being reloaded
                 IconButton(onClick = {
                     val all = metaData.latestRelease.value?.assets.orEmpty() + metaData.latestPreRelease.value?.assets.orEmpty()
                     all.forEach { asset ->
                         when (DownloadStateManager.states.value[asset.downloadUrl]) {
                             is DownloadStatus.Downloading, is DownloadStatus.Paused -> {
-                                val i = Intent(context, ApkDownloadService::class.java).apply { action = ApkDownloadService.ACTION_CANCEL; putExtra("DOWNLOAD_URL", asset.downloadUrl) }
+                                val i = Intent(context, ApkDownloadService::class.java).apply {
+                                    action = ApkDownloadService.ACTION_CANCEL
+                                    putExtra("DOWNLOAD_URL", asset.downloadUrl)
+                                }
                                 context.startService(i)
                             }
-                            is DownloadStatus.Completed, is DownloadStatus.Failed -> DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
+                            is DownloadStatus.Completed, is DownloadStatus.Failed ->
+                                DownloadStateManager.updateStatus(asset.downloadUrl, DownloadStatus.Idle)
                             else -> {}
                         }
                     }
                     metaData.refreshNetwork()
                 }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.Refresh, "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    if (isRefreshing || metaData.state.value == MetaDataState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Icon(Icons.Default.Refresh, "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    }
                 }
+                // Delete
                 IconButton(onClick = { onDelete(metaData.appName, metaData.repoUrl) }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
                 }

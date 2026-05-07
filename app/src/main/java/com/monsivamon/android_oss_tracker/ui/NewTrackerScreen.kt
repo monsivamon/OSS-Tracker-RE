@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -24,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -47,6 +49,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     val ctx = LocalContext.current
 
     LaunchedEffect(repoUrl) { metaData.refreshNetwork() }
+    // Re‑fetch when the user toggles the "Track pre‑releases" setting
     val trackPreReleases = AppSettings.trackPreReleases
     LaunchedEffect(trackPreReleases) { metaData.refreshNetwork() }
 
@@ -62,6 +65,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
         MetaDataState.Loaded      -> if (stable == null && pre == null) "<no release>" else ""
     }
 
+    // Provider badge colour and label
     val (providerLabel, providerColor) = when (metaData.repo) {
         is com.monsivamon.android_oss_tracker.repo.GitHub -> "GitHub" to Color(0xFF24292F)
         is com.monsivamon.android_oss_tracker.repo.GitLab -> "GitLab" to Color(0xFFE24329)
@@ -76,7 +80,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(16.dp)) {
             Column(modifier = Modifier.weight(1f)) {
 
-                // Repository name + provider badge
+                // Repository name with provider badge
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         metaData.appName, style = MaterialTheme.typography.titleLarge,
@@ -97,7 +101,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Stable release info
+                // ── Stable release ─────────────────────
                 stable?.let { s ->
                     Text("Stable Release", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -122,9 +126,9 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Pre-release info
+                // ── Pre‑release ─────────────────────────
                 pre?.let { p ->
-                    Text("Pre‑release", style = MaterialTheme.typography.titleSmall,
+                    Text("Pre-release", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -160,6 +164,11 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     }
 }
 
+/**
+ * Opens [url] in the default browser.
+ * Uses [Intent.ACTION_VIEW] with a new‑task flag to avoid crashes
+ * when the browser is not already running.
+ */
 private fun openInBrowser(context: Context, url: String) {
     if (url.isNotBlank()) {
         try {
@@ -171,9 +180,18 @@ private fun openInBrowser(context: Context, url: String) {
 /**
  * Screen where the user enters a GitHub / GitLab URL, tests it against the
  * API, and optionally adds it to the tracked list.
+ *
+ * @param onNewTrackerAdded Invoked after a repository has been successfully
+ *                          added, allowing the parent to close a temporary
+ *                          New tab.
+ * @param onNavigateToApps  Called when the user presses the back arrow to
+ *                          return to the Apps tab.
  */
 @Composable
-fun NewTrackerScreen(onNewTrackerAdded: (() -> Unit)? = null) {
+fun NewTrackerScreen(
+    onNewTrackerAdded: (() -> Unit)? = null,
+    onNavigateToApps: () -> Unit = {}
+) {
     val ctx = LocalContext.current
     val sharedPrefs = remember { ctx.getSharedPreferences(PersistentState.STATE_FILENAME, Context.MODE_PRIVATE) }
     val focus = LocalFocusManager.current
@@ -181,9 +199,40 @@ fun NewTrackerScreen(onNewTrackerAdded: (() -> Unit)? = null) {
     val tested = remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("Add a new App Tracker", style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp))
+
+        // ── Header with back navigation ─────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left – back arrow
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                IconButton(onClick = {
+                    focus.clearFocus()
+                    onNavigateToApps()
+                }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to Apps",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Centre – title
+            Text(
+                text = "Add Tracker",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Right – spacer for visual balance
+            Box(modifier = Modifier.weight(1f))
+        }
 
         OutlinedTextField(
             value = url.value,

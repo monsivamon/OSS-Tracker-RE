@@ -1,6 +1,10 @@
 package com.monsivamon.android_oss_tracker.ui
 
-import android.util.Log
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -13,11 +17,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import com.monsivamon.android_oss_tracker.util.AppSettings
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Top‑level destinations for the bottom navigation bar.
+ * Top‑level destinations shown in the bottom navigation bar.
  */
 enum class AppDestination(val title: String, val icon: ImageVector) {
     APPS("Apps", Icons.AutoMirrored.Filled.List),
@@ -27,28 +33,26 @@ enum class AppDestination(val title: String, val icon: ImageVector) {
 }
 
 /**
- * Root composable that manages the swipeable [HorizontalPager] and the
- * bottom navigation bar.
+ * Root composable that owns the [HorizontalPager] and the bottom bar.
  *
- * The visibility of the *New* and *History* tabs is controlled via
- * [AppSettings.showNewTab] and [AppSettings.showHistoryTab].  When a
- * tab is hidden the corresponding bottom‑bar item disappears, and the
- * user cannot swipe into it.  A dedicated **+Add** button on the Apps
- * screen temporarily reveals the *New* tab without toggling the
- * persistent setting.
+ * The *New* and *History* tabs can be hidden via [AppSettings].  When a
+ * tab is hidden a dedicated **+Add** button on the Apps screen temporarily
+ * reveals the *New* tab.  Swipe is disabled while the temporary tab is
+ * visible to avoid accidental navigation.
  */
 @Composable
 fun MainContainer() {
-    // ── Settings‑driven tab visibility ──────────────────────────
     val showNew = AppSettings.showNewTab
     val showHistory = AppSettings.showHistoryTab
+    // Bottom bar is only shown when at least one optional tab is active.
+    val showBottomBar = showNew || showHistory
 
-    // ── Temporary New tab (triggered by +Add button) ────────────
+    // ── Temporary New tab (triggered by +Add) ────────────
     var newTabCalledFromAdd by remember { mutableStateOf(false) }
     var showTemporaryNewTab by remember { mutableStateOf(false) }
     var scrollToNewInProgress by remember { mutableStateOf(false) }
 
-    /** The list of destinations that are currently visible. */
+    /** The currently visible destinations, including any temporary tab. */
     val visibleDestinations = remember(showNew, showHistory, showTemporaryNewTab) {
         buildList {
             add(AppDestination.APPS)
@@ -58,16 +62,57 @@ fun MainContainer() {
         }
     }
 
-    // Keeps track of the last destination so that we can restore it
-    // after the tab list changes.
-    var previousDestination by remember { mutableStateOf(AppDestination.APPS) }
-
+    /** The destination the user is currently seeing. */
+    var currentActiveDestination by remember { mutableStateOf(AppDestination.APPS) }
     val coroutineScope = rememberCoroutineScope()
+    val activity = LocalContext.current as? Activity
+    var showExitDialog by remember { mutableStateOf(false) }
 
-    // ── Callbacks passed to child screens ──────────────────────
+    val pagerState = rememberPagerState(
+        pageCount = { visibleDestinations.size }
+    )
+
+    /**
+     * Performs a smooth scroll to [targetIndex], inserting a pseudo‑warp
+     * when the distance is more than one page so that [HorizontalPager]
+     * can animate naturally over a long jump.
+     */
+    suspend fun performSmoothScroll(targetIndex: Int) {
+        if (targetIndex < 0 || targetIndex >= visibleDestinations.size) return
+        val current = pagerState.currentPage
+        if (kotlin.math.abs(current - targetIndex) > 1) {
+            val warpIndex = if (current > targetIndex) targetIndex + 1 else targetIndex - 1
+            pagerState.scrollToPage(warpIndex)
+        }
+        pagerState.animateScrollToPage(targetIndex)
+    }
+
+    // Synchronise the pager when the tab list changes.
+    LaunchedEffect(visibleDestinations) {
+        val syncIndex = visibleDestinations.indexOf(currentActiveDestination)
+        if (syncIndex >= 0 && !scrollToNewInProgress) {
+            pagerState.scrollToPage(syncIndex)
+        } else if (scrollToNewInProgress) {
+            val newIndex = visibleDestinations.indexOf(AppDestination.NEW)
+            if (newIndex >= 0) {
+                performSmoothScroll(newIndex)
+                scrollToNewInProgress = false
+            }
+        }
+    }
+
+    // Keep currentActiveDestination in sync with the user's swipes.
+    LaunchedEffect(pagerState.currentPage) {
+        visibleDestinations.getOrNull(pagerState.currentPage)?.let {
+            currentActiveDestination = it
+        }
+    }
+
+    // ── Callbacks passed to child screens ──────────────
 
     val onNavigateToNewFromApps: () -> Unit = {
         if (!showNew) {
+            scrollToNewInProgress = true
             newTabCalledFromAdd = true
             showTemporaryNewTab = true
         }
@@ -75,105 +120,139 @@ fun MainContainer() {
 
     val onNewTrackerAdded: () -> Unit = {
         if (!showNew) {
-            newTabCalledFromAdd = false
-            showTemporaryNewTab = false
+            coroutineScope.launch {
+                val appsIndex = visibleDestinations.indexOf(AppDestination.APPS)
+                performSmoothScroll(appsIndex)
+                delay(350L)
+                newTabCalledFromAdd = false
+                showTemporaryNewTab = false
+            }
         }
     }
 
-    // ── Re‑create the pager when the tab list changes ──────────
-    //    so that the currently‑selected tab survives the transition
-    //    without any visual flicker.
-    key(visibleDestinations) {
-        val initialPage = visibleDestinations.indexOf(previousDestination)
-            .coerceIn(0, visibleDestinations.size - 1)
+    // ── System back gesture ────────────────────────────
+    BackHandler(enabled = true) {
+        if (currentActiveDestination != AppDestination.APPS) {
+            val appsIndex = visibleDestinations.indexOf(AppDestination.APPS)
+            if (appsIndex >= 0) {
+                coroutineScope.launch {
+                    performSmoothScroll(appsIndex)
+                    if (newTabCalledFromAdd) {
+                        delay(350L)
+                        newTabCalledFromAdd = false
+                        showTemporaryNewTab = false
+                    }
+                }
+            }
+        } else {
+            showExitDialog = true
+        }
+    }
 
-        val pagerState = rememberPagerState(
-            pageCount = { visibleDestinations.size },
-            initialPage = initialPage
+    // Clean up the temporary New tab when the user leaves it.
+    LaunchedEffect(newTabCalledFromAdd, pagerState.currentPage) {
+        if (newTabCalledFromAdd && !scrollToNewInProgress) {
+            if (visibleDestinations.getOrNull(pagerState.currentPage) != AppDestination.NEW) {
+                newTabCalledFromAdd = false
+                showTemporaryNewTab = false
+            }
+        }
+    }
+
+    // ── Exit confirmation dialog ───────────────────────
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Confirm Exit") },
+            text = { Text("Are you sure you want to exit?") },
+            confirmButton = {
+                TextButton(onClick = { showExitDialog = false; activity?.finish() }) {
+                    Text("OK", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         )
+    }
 
-        // Keep previousDestination up‑to‑date with user navigation.
-        LaunchedEffect(pagerState.currentPage) {
-            previousDestination = visibleDestinations.getOrNull(pagerState.currentPage)
-                ?: AppDestination.APPS
-        }
-
-        // Animate to the New tab when it is added via the +Add button.
-        LaunchedEffect(showTemporaryNewTab) {
-            if (showTemporaryNewTab && !showNew) {
-                scrollToNewInProgress = true
-                val newIndex = visibleDestinations.indexOf(AppDestination.NEW)
-                if (newIndex >= 0) {
-                    pagerState.animateScrollToPage(newIndex)
-                }
-            }
-        }
-
-        // Clear the animation flag once we land on the New tab.
-        LaunchedEffect(pagerState.currentPage) {
-            if (scrollToNewInProgress &&
-                visibleDestinations.getOrNull(pagerState.currentPage) == AppDestination.NEW) {
-                scrollToNewInProgress = false
-            }
-        }
-
-        // If the user leaves the temporary New tab without adding a
-        // repository, automatically hide it and return to Apps.
-        LaunchedEffect(newTabCalledFromAdd, pagerState.currentPage) {
-            if (newTabCalledFromAdd && !scrollToNewInProgress) {
-                val currentDest = visibleDestinations.getOrNull(pagerState.currentPage)
-                if (currentDest != AppDestination.NEW) {
-                    newTabCalledFromAdd = false
-                    showTemporaryNewTab = false
-                }
-            }
-        }
-
-        // ── UI ──────────────────────────────────────────────────
-        Scaffold(
-            bottomBar = {
+    // ── UI layout ──────────────────────────────────────
+    Scaffold(
+        bottomBar = {
+            AnimatedVisibility(
+                visible = showBottomBar,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it })
+            ) {
                 NavigationBar {
                     visibleDestinations.forEachIndexed { _, dest ->
                         // Don't show a temporary New tab in the bottom bar.
-                        val isTemporaryNew = dest == AppDestination.NEW &&
-                                showTemporaryNewTab && !showNew
+                        val isTemporaryNew = dest == AppDestination.NEW && showTemporaryNewTab && !showNew
                         if (!isTemporaryNew) {
                             val targetIndex = visibleDestinations.indexOf(dest)
                             NavigationBarItem(
-                                icon = { Icon(dest.icon, contentDescription = dest.title) },
+                                icon = { Icon(dest.icon, null) },
                                 label = { Text(dest.title) },
-                                selected = pagerState.currentPage == targetIndex,
-                                onClick = {
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage(targetIndex)
-                                    }
-                                }
+                                selected = currentActiveDestination == dest,
+                                onClick = { coroutineScope.launch { performSmoothScroll(targetIndex) } }
                             )
                         }
                     }
                 }
             }
-        ) { padding ->
-            // Swipe is disabled while the temporary New tab is shown.
-            HorizontalPager(
-                state = pagerState,
-                userScrollEnabled = !newTabCalledFromAdd,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            ) { page ->
-                when (visibleDestinations[page]) {
-                    AppDestination.APPS -> AppsScreen(
-                        onNavigateToNew = if (!showNew) {
-                            { onNavigateToNewFromApps() }
-                        } else null
-                    )
-                    AppDestination.NEW -> NewTrackerScreen(
-                        onNewTrackerAdded = onNewTrackerAdded
-                    )
-                    AppDestination.HISTORY -> HistoryScreen()
-                    AppDestination.SETTINGS -> SettingsScreen()
-                }
+        }
+    ) { padding ->
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = showBottomBar && !newTabCalledFromAdd,
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) { page ->
+            val actual = visibleDestinations.getOrNull(page)
+
+            // Mask the page if an animation is still in flight so that
+            // the content does not flicker.
+            val destinationToRender = if (
+                page == pagerState.currentPage &&
+                actual != currentActiveDestination &&
+                !scrollToNewInProgress &&
+                !pagerState.isScrollInProgress
+            ) {
+                currentActiveDestination
+            } else {
+                actual ?: AppDestination.APPS
+            }
+
+            when (destinationToRender) {
+                AppDestination.APPS -> AppsScreen(
+                    onNavigateToNew = if (!showNew) { { onNavigateToNewFromApps() } } else null,
+                    onNavigateToSettings = {
+                        val idx = visibleDestinations.indexOf(AppDestination.SETTINGS)
+                        coroutineScope.launch { performSmoothScroll(idx) }
+                    }
+                )
+                AppDestination.NEW -> NewTrackerScreen(
+                    onNewTrackerAdded = onNewTrackerAdded,
+                    onNavigateToApps = {
+                        coroutineScope.launch {
+                            val idx = visibleDestinations.indexOf(AppDestination.APPS)
+                            performSmoothScroll(idx)
+                            if (newTabCalledFromAdd) {
+                                delay(350L)
+                                newTabCalledFromAdd = false
+                                showTemporaryNewTab = false
+                            }
+                        }
+                    }
+                )
+                AppDestination.HISTORY -> HistoryScreen()
+                AppDestination.SETTINGS -> SettingsScreen(
+                    onNavigateToApps = {
+                        val idx = visibleDestinations.indexOf(AppDestination.APPS)
+                        coroutineScope.launch { performSmoothScroll(idx) }
+                    }
+                )
             }
         }
     }

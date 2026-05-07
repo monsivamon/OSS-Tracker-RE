@@ -10,10 +10,9 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 ## 🎥 Screenshots
 
 <p align="center">
-  <img src="screenshots/Apps_v0.2.2.png"      alt="Apps"          width="24%" />
-  <img src="screenshots/New_v0.2.2.png"        alt="New Tracker"   width="24%" />
-  <img src="screenshots/History_v0.2.2.png"    alt="History"       width="24%" />
-  <img src="screenshots/Setting_v0.2.2.png"    alt="Settings"      width="24%" />
+  <img src="screenshots/Apps_v0.2.3.png"      alt="Apps"          width="24%" />
+  <img src="screenshots/New_v0.2.3.png"        alt="Add Tracker"   width="24%" />
+  <img src="screenshots/Setting_v0.2.3.png"    alt="Settings"      width="24%" />
 </p>
 
 ## ✨ Features
@@ -24,8 +23,14 @@ APKs are fetched by a dedicated foreground service. **Real‑time progress** is 
 ### ⚡ One‑tap install — or download only
 When a download completes, a **"Tap to install"** button appears inside the repository card. Prefer to install manually? Switch to **Download Only** mode in Settings — APKs land straight in your device's Downloads folder.
 
+### 🔑 Bring your own token
+GitHub limits anonymous API requests to 60 per hour. Go to **Settings → API Configuration**, paste your **Personal Access Token**, and the limit jumps to **5,000/hour**. The token is stored only on your device and never leaves it.
+
 ### 🔔 Auto update check
 The app periodically checks all tracked repositories for new stable releases and notifies you when one is found. Enabled by default (every 24 hours), with a simple on/off toggle in Settings.
+
+### ↩️ Pull‑to‑refresh
+Pull down on the Apps screen to refresh all tracked repositories at once. A status indicator shows when the check is in progress.
 
 ### 🏷️ Stable & Pre‑release separated
 Each repository shows its latest stable and pre‑release versions in separate, collapsible cards, complete with release dates. Toggle pre‑release tracking on or off in Settings.
@@ -40,18 +45,23 @@ Choose between **Light**, **Dark**, or **System** theme via a segmented control.
 Back up or migrate your list of tracked repositories as a plain text file.
 
 ### 📋 Download history
-The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab).
+The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab).  
+**Note:** The History tab is hidden by default. Enable it in **Settings → Developer Options** to see your download records.
+
+### 🛠️ Developer Options
+Advanced settings (such as hiding the New or History tabs from the bottom bar, or enabling the History tab itself) are tucked away in a collapsible **Developer Options** section at the bottom of the Settings screen.
 
 ### 🔄 Reset function
 One button erases all application data, restarts the app, and returns it to a factory‑fresh state.
 
 ## 🚀 Usage
 
-1. **Add a repository** – Tap the **+ Add** button on the Apps screen, enter a GitHub or GitLab URL, and tap **Test Repository**. (The New tab can be re‑enabled from Settings if you prefer the old layout.)
+1. **Add a repository** – Tap the **+** icon on the Apps screen, enter a GitHub or GitLab URL, and tap **Test Repository**. (The New tab can be re‑enabled from Settings → Developer Options if you prefer a dedicated tab.)
 2. **Start tracking** – Tap the **+** icon on the preview card to add it to your list.
-3. **Download** – On the **Apps** tab, tap **Download** on any asset. Progress is shown in real time — pause or resume as needed.
-4. **Install** – After the download finishes, tap **Tap to install** (or find the APK in your Downloads folder if you're using Download Only mode).
-5. **Manage** – Use the refresh icon to check for new releases. Import or export your list from the Settings screen. Drag cards with the ↑↓ arrows to reorder them.
+3. **Configure your token (recommended)** – Go to **Settings → API Configuration** and paste a GitHub Personal Access Token to avoid rate limits.
+4. **Download** – On the **Apps** tab, tap **Download** on any asset. Progress is shown in real time — pause or resume as needed.
+5. **Install** – After the download finishes, tap **Tap to install** (or find the APK in your Downloads folder if you're using Download Only mode).
+6. **Manage** – Use the refresh icon on any card to check for new releases, or pull down on the list to refresh everything at once. Import or export your list from the Settings screen. Reorder cards with the ▲▼ arrows.
 
 ## 🏆 Credits
 

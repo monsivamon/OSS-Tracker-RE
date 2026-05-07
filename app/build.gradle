@@ -14,26 +14,13 @@ plugins {
     id "com.jaredsburrows.license" version "0.9.0"
 }
 
-// ── Secrets ─────────────────────────────────────────────
-// The GitHub API token is injected from local.properties
-// (excluded from Git) so that every developer can supply
-// their own token without modifying this script.
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
-}
-def githubToken = localProperties.getProperty('GITHUB_TOKEN', '')
-
 // ── Android configuration ──────────────────────────────
 android {
     namespace 'com.monsivamon.android_oss_tracker'
     compileSdk 34
 
     buildFeatures {
-        buildConfig true   // Exposes BuildConfig.GITHUB_TOKEN
+        buildConfig true   // Generates BuildConfig class
         compose true       // Enables the Compose compiler plugin
     }
 
@@ -42,10 +29,7 @@ android {
         minSdk 27
         targetSdk 34
         versionCode 9
-        versionName "0.2.2"
-
-        buildConfigField "String", "GITHUB_TOKEN", "\"${githubToken}\""
-
+        versionName "0.2.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary true }
     }
@@ -117,6 +101,7 @@ dependencies {
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }
 
 // ⚠️  Do not add `apply plugin: "com.jaredsburrows.license"` here.
