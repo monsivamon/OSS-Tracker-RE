@@ -61,7 +61,12 @@ private fun HistoryItem(entry: com.monsivamon.android_oss_tracker.util.DownloadH
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Provider badge
             if (entry.provider.isNotBlank()) {
-                val (pl, pc) = when (entry.provider) { "GitHub" -> "GitHub" to Color(0xFF24292F); "GitLab" -> "GitLab" to Color(0xFFE24329); else -> entry.provider to Color.Gray }
+                val (pl, pc) = when (entry.provider) {
+                    "GitHub" -> "GitHub" to Color(0xFF24292F);
+                    "GitLab" -> "GitLab" to Color(0xFFE24329);
+                    "F-Droid" -> "F-Droid" to Color(0xFF1976D2);
+                    else -> entry.provider to Color.Gray
+                }
                 Box(Modifier.clip(RoundedCornerShape(4.dp)).background(pc).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { Text(pl, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold) }
                 Spacer(Modifier.width(4.dp))
             }

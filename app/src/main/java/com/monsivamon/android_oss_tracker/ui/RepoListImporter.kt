@@ -17,9 +17,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Lets the user pick a plain‑text file and import its lines as
- * repository URLs.  Parsing and cache invalidation happen off the
- * main thread.
+ * Allows the user to import a plain‑text file containing repository URLs,
+ * one per line, and adds them to the tracking list.
+ * File parsing and cache invalidation are performed off the main thread.
  */
 @Composable
 fun RepoListImporter() {
@@ -33,7 +33,7 @@ fun RepoListImporter() {
         if (data.isNotEmpty()) {
             scope.launch {
                 withContext(Dispatchers.IO) {
-                    // ★ 修正: 新しいシグネチャ addTrackers(prefs, lines) を使用
+                    // Persist each line as a tracked repository URL and invalidate the cache
                     PersistentState.addTrackers(sharedPreferences, data.lines())
                     AppCache.cachedRepos.clear()
                 }
@@ -49,7 +49,9 @@ fun RepoListImporter() {
         shape = RoundedCornerShape(12.dp),
         onClick = { reader.launch(arrayOf("text/plain")) }
     ) {
-        Text("Import Repo List", style = MaterialTheme.typography.titleMedium,
+        Text("Import Repo List",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(vertical = 4.dp))
     }
 }

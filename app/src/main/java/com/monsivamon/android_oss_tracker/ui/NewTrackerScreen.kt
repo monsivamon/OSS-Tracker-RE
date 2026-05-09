@@ -36,11 +36,11 @@ import com.monsivamon.android_oss_tracker.repo.RepoMetaData
 import com.monsivamon.android_oss_tracker.util.AppSettings
 
 /**
- * Preview card for a repository URL that has not yet been added to the
- * tracked list.  Fetches metadata and displays the latest stable and
- * pre‑release versions together with their assets.
+ * Preview card that displays metadata for a repository URL before it is added
+ * to the tracking list.
  *
- * Tapping the ⊕ icon adds the repository to persistent storage.
+ * Fetches the latest stable and pre‑release versions along with their assets.
+ * Tapping the add button persists the repository to storage.
  */
 @Composable
 fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
@@ -49,7 +49,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     val ctx = LocalContext.current
 
     LaunchedEffect(repoUrl) { metaData.refreshNetwork() }
-    // Re‑fetch when the user toggles the "Track pre‑releases" setting
+    // Re-fetch when the "track pre‑releases" setting is toggled
     val trackPreReleases = AppSettings.trackPreReleases
     LaunchedEffect(trackPreReleases) { metaData.refreshNetwork() }
 
@@ -65,10 +65,11 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
         MetaDataState.Loaded      -> if (stable == null && pre == null) "<no release>" else ""
     }
 
-    // Provider badge colour and label
+    // Determine the provider badge color and label
     val (providerLabel, providerColor) = when (metaData.repo) {
         is com.monsivamon.android_oss_tracker.repo.GitHub -> "GitHub" to Color(0xFF24292F)
         is com.monsivamon.android_oss_tracker.repo.GitLab -> "GitLab" to Color(0xFFE24329)
+        is com.monsivamon.android_oss_tracker.repo.FDroid -> "F-Droid" to Color(0xFF1976D2)
         else -> "" to Color.Transparent
     }
 
@@ -101,7 +102,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // ── Stable release ─────────────────────
+                // Stable release section
                 stable?.let { s ->
                     Text("Stable Release", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -126,7 +127,7 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // ── Pre‑release ─────────────────────────
+                // Pre-release section
                 pre?.let { p ->
                     Text("Pre-release", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold)
@@ -165,9 +166,11 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
 }
 
 /**
- * Opens [url] in the default browser.
- * Uses [Intent.ACTION_VIEW] with a new‑task flag to avoid crashes
- * when the browser is not already running.
+ * Opens [url] in the default web browser.
+ *
+ * Uses [Intent.ACTION_VIEW] with the [Intent.FLAG_ACTIVITY_NEW_TASK] flag
+ * to avoid crashes when the browser process is not already running in the
+ * background.
  */
 private fun openInBrowser(context: Context, url: String) {
     if (url.isNotBlank()) {
@@ -178,14 +181,13 @@ private fun openInBrowser(context: Context, url: String) {
 }
 
 /**
- * Screen where the user enters a GitHub / GitLab URL, tests it against the
- * API, and optionally adds it to the tracked list.
+ * Screen that allows the user to enter a repository URL, validate it against
+ * the provider's API, and optionally add it to the tracked list.
  *
- * @param onNewTrackerAdded Invoked after a repository has been successfully
- *                          added, allowing the parent to close a temporary
- *                          New tab.
+ * @param onNewTrackerAdded Called after a repository has been added
+ *     successfully so the parent can dismiss a temporary tab.
  * @param onNavigateToApps  Called when the user presses the back arrow to
- *                          return to the Apps tab.
+ *     return to the main apps tab.
  */
 @Composable
 fun NewTrackerScreen(
@@ -200,12 +202,11 @@ fun NewTrackerScreen(
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
 
-        // ── Header with back navigation ─────────────────
+        // Header row with back navigation and centred title
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left – back arrow
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 IconButton(onClick = {
                     focus.clearFocus()
@@ -219,7 +220,6 @@ fun NewTrackerScreen(
                 }
             }
 
-            // Centre – title
             Text(
                 text = "Add Tracker",
                 style = MaterialTheme.typography.headlineMedium,
@@ -230,7 +230,6 @@ fun NewTrackerScreen(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Right – spacer for visual balance
             Box(modifier = Modifier.weight(1f))
         }
 

@@ -16,8 +16,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Exports all currently tracked repository URLs to a plain‑text file.
- * The list is fetched asynchronously so the UI stays responsive.
+ * Exports the current list of tracked repository URLs as a newline‑separated
+ * plain‑text file. The list is built off the main thread to keep the UI responsive.
  */
 @Composable
 fun RepoListExporter() {
@@ -43,7 +43,9 @@ fun RepoListExporter() {
         shape = RoundedCornerShape(12.dp),
         onClick = { writer.launch("oss_trackers.txt") }
     ) {
-        Text("Export Repo List", style = MaterialTheme.typography.titleMedium,
+        Text("Export Repo List",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(vertical = 4.dp))
     }
 }

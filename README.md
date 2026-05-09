@@ -3,19 +3,27 @@
 [![Latest Release](https://img.shields.io/github/v/release/monsivamon/OSS-Tracker-RE)](https://github.com/monsivamon/OSS-Tracker-RE/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A lightweight Android app that **monitors GitHub and GitLab repositories** for the latest APK releases, **downloads them in the background**, and lets you **install them with a single tap**. No browser, no file manager — everything happens right inside the app.
+A lightweight Android app that **monitors GitHub, GitLab, and F‑Droid repositories** for the latest APK releases, **downloads them in the background**, and lets you **install them with a single tap**. No browser, no file manager — everything happens right inside the app.
 
 This project started as a fork of [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker) and has since been heavily re‑designed and extended.
 
 ## 🎥 Screenshots
 
 <p align="center">
-  <img src="screenshots/Apps_v0.2.3.png"      alt="Apps"          width="24%" />
-  <img src="screenshots/New_v0.2.3.png"        alt="Add Tracker"   width="24%" />
-  <img src="screenshots/Setting_v0.2.3.png"    alt="Settings"      width="24%" />
+  <img src="screenshots/Apps_v0.2.4.png"      alt="Apps"          width="19%" />
+  <img src="screenshots/New_v0.2.4.png"        alt="Add Tracker"   width="19%" />
+  <img src="screenshots/History_v0.2.4.png"        alt="History"   width="19%" />
+  <img src="screenshots/Setting_v0.2.4_1.png"        alt="Setting_1"   width="19%" />
+  <img src="screenshots/Setting_v0.2.4_2.png"    alt="Settings_2"      width="19%" />
 </p>
 
 ## ✨ Features
+
+### 🎨 Liquid glass design
+A modern frosted‑glass aesthetic with smooth blur, transparency, and refined depth gives the whole interface a clean, premium feel.
+
+### 🎨 Custom background gradients
+Choose from **16 pastel gradient palettes** in Settings to personalize the app's background. The palette is saved automatically and applies instantly.
 
 ### 📦 Fast download engine
 APKs are fetched by a dedicated foreground service. **Real‑time progress** is displayed (file name, percentage, and a progress bar). You can **pause, resume, or cancel** downloads whenever you want.
@@ -42,10 +50,10 @@ Instantly search through your tracked repositories from the Apps screen. A clear
 Choose between **Light**, **Dark**, or **System** theme via a segmented control. Your preference is saved automatically.
 
 ### 📂 Import / Export
-Back up or migrate your list of tracked repositories as a plain text file.
+Back up or migrate your list of tracked repositories as a plain text file. One tap to export, one tap to import a text file with one repository URL per line.
 
 ### 📋 Download history
-The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab).  
+The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab / F‑Droid).  
 **Note:** The History tab is hidden by default. Enable it in **Settings → Developer Options** to see your download records.
 
 ### 🛠️ Developer Options
@@ -56,7 +64,7 @@ One button erases all application data, restarts the app, and returns it to a fa
 
 ## 🚀 Usage
 
-1. **Add a repository** – Tap the **+** icon on the Apps screen, enter a GitHub or GitLab URL, and tap **Test Repository**. (The New tab can be re‑enabled from Settings → Developer Options if you prefer a dedicated tab.)
+1. **Add a repository** – Tap the **+** icon on the Apps screen, enter a GitHub, GitLab, or F‑Droid URL, and tap **Test Repository**. (You can re‑enable the dedicated New tab in Settings → Developer Options if you prefer.)
 2. **Start tracking** – Tap the **+** icon on the preview card to add it to your list.
 3. **Configure your token (recommended)** – Go to **Settings → API Configuration** and paste a GitHub Personal Access Token to avoid rate limits.
 4. **Download** – On the **Apps** tab, tap **Download** on any asset. Progress is shown in real time — pause or resume as needed.
