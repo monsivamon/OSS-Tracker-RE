@@ -1,0 +1,16 @@
+<i>OSS Tracker RE</i> lets you seamlessly keep track of updates, download, and manage Open Source Applications directly from their source repositories.
+
+The application uses the <code>QUERY_ALL_PACKAGES</code> permission in order to fetch the currently installed version of each app in the tracker to compare against.
+
+<b>Key Features:</b>
+<ul>
+<li>Subscribe to Android OSS repositories across GitHub, GitLab, and F-Droid.</li>
+<li>Smart versioning that automatically separates stable releases from pre-releases.</li>
+<li>Robust background download engine with pause, resume, and real-time progress.</li>
+<li>One-tap install directly within the app (or choose Download-Only mode).</li>
+<li>Automatic background checks to notify you when new updates are available.</li>
+<li>Comprehensive download history with version numbers, release types, and detailed error logs.</li>
+<li>Highly customizable modern UI featuring a frosted "Liquid glass" aesthetic, 16 background gradients, and Dark/Light theme support.</li>
+<li>Easily import or export your tracked repository list to switch devices.</li>
+<li>Bypass API limits by using your own GitHub Personal Access Token.</li>
+</ul>
