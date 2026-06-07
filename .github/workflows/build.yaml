@@ -1,0 +1,38 @@
+name: Build and Release APK
+
+# Triggered when a version tag starting with 'v' (e.g., v0.2.5) is pushed
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Build the signed APK using the signing configuration in build.gradle
+      - name: Build and Sign Release APK
+        run: ./gradlew assembleRelease
+
+      # Automatically publish the signed APK to GitHub Releases
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Path to the generated APK file
+          files: app/build/outputs/apk/release/app-release.apk
+          # Automatically generate the release notes from commit logs
+          generate_release_notes: true

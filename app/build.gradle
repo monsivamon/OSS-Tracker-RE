@@ -29,9 +29,38 @@ android {
         minSdk 27
         targetSdk 34
         versionCode 9
-        versionName "0.2.4"
+        versionName "0.2.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary true }
+    }
+
+    // [Added] Dynamic signing configuration based on environment
+    signingConfigs {
+        release {
+            // If running on GitHub Actions
+            if (System.getenv("GITHUB_ACTIONS") == "true") {
+                // Use the dummy keystore located in the repository root
+                storeFile file("../ks.keystore")
+                storePassword "123456789"
+                keyAlias "jhc"
+                keyPassword "123456789"
+            }
+            // If running on a local Windows environment
+            else if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+                // Use the absolute path to the shared keystore on Windows
+                storeFile file("../ks_pkcs12.keystore")
+                storePassword "123456789"
+                keyAlias "jhc"
+                keyPassword "123456789"
+            }
+            // Fallback for other local environments (Mac, Linux, etc.)
+            else {
+                storeFile file("../ks.keystore")
+                storePassword "123456789"
+                keyAlias "jhc"
+                keyPassword "123456789"
+            }
+        }
     }
 
     buildTypes {
@@ -41,7 +70,8 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            // [Changed] Apply the release signing config instead of debug
+            signingConfig signingConfigs.release
         }
     }
 
