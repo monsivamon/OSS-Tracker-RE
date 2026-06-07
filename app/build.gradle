@@ -29,9 +29,19 @@ android {
         minSdk 27
         targetSdk 34
         versionCode 9
-        versionName "0.2.4"
+        versionName "0.2.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary true }
+    }
+
+    // [Added] Signing configuration
+    signingConfigs {
+        release {
+                storeFile file("../ks_pkcs12.keystore")
+                storePassword "123456789"
+                keyAlias "jhc"
+                keyPassword "123456789"
+        }
     }
 
     buildTypes {
@@ -41,7 +51,8 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            // [Changed] Apply the release signing config instead of debug
+            signingConfig signingConfigs.release
         }
     }
 

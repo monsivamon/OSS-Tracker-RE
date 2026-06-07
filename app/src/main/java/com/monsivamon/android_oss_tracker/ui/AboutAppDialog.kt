@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.monsivamon.android_oss_tracker.BuildConfig
 
 /**
  * Displays application metadata, developer credits, and a link to the
@@ -43,11 +44,12 @@ fun AboutAppDialog() {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("OSS Tracker RE", style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("v0.2.4", style = MaterialTheme.typography.labelLarge,
+
+                    Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Track and download the latest APKs from open‑source projects on GitHub and GitLab.",
+                    Text("Track and download the latest APKs from open‑source projects on GitHub, GitLab and F-Droid.",
                         textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface)
 

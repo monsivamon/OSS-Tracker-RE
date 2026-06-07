@@ -1,0 +1,56 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # Allows manual triggering from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Build the signed APK using the signing configuration in build.gradle
+      - name: Build and Sign Release APK
+        run: ./gradlew assembleRelease
+
+      # Determine whether to use the pushed tag or fetch the latest existing release tag
+      - name: Determine Release Tag
+        id: determine_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Fetch the latest release tag from GitHub using GitHub CLI
+            TAG=$(gh release view --json tagName --jq .tagName)
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Create a new release or update the assets of the latest existing release
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.determine_tag.outputs.tag }}
+          files: app/build/outputs/apk/release/app-release.apk
+          # Only generate new release notes when triggered by a new tag push
+          generate_release_notes: ${{ github.event_name != 'workflow_dispatch' }}
+          overwrite_files: true

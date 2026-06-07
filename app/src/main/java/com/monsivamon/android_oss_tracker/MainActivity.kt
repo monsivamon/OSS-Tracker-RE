@@ -43,6 +43,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // Delete all accumulated APK files in the app's internal directories on startup
+        Thread {
+            try {
+                val targetDirs = listOf(
+                    getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
+                    cacheDir
+                )
+                targetDirs.forEach { dir ->
+                    dir?.listFiles()?.forEach { file ->
+                        if (file.name.endsWith(".apk", ignoreCase = true)) {
+                            file.delete()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }.start()
+
         setContent {
             AndroidossreleasetrackerTheme {
                 RequestNotificationPermission()
