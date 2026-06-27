@@ -2,6 +2,7 @@ package com.monsivamon.android_oss_tracker.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,13 +36,6 @@ import com.monsivamon.android_oss_tracker.repo.MetaDataState
 import com.monsivamon.android_oss_tracker.repo.RepoMetaData
 import com.monsivamon.android_oss_tracker.util.AppSettings
 
-/**
- * Preview card that displays metadata for a repository URL before it is added
- * to the tracking list.
- *
- * Fetches the latest stable and pre‑release versions along with their assets.
- * Tapping the add button persists the repository to storage.
- */
 @Composable
 fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     val requestQueue = remember { OSSApp.requestQueue }
@@ -49,7 +43,6 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     val ctx = LocalContext.current
 
     LaunchedEffect(repoUrl) { metaData.refreshNetwork() }
-    // Re-fetch when the "track pre‑releases" setting is toggled
     val trackPreReleases = AppSettings.trackPreReleases
     LaunchedEffect(trackPreReleases) { metaData.refreshNetwork() }
 
@@ -65,12 +58,13 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
         MetaDataState.Loaded      -> if (stable == null && pre == null) "<no release>" else ""
     }
 
-    // Determine the provider badge color and label
-    val (providerLabel, providerColor) = when (metaData.repo) {
-        is com.monsivamon.android_oss_tracker.repo.GitHub -> "GitHub" to Color(0xFF24292F)
-        is com.monsivamon.android_oss_tracker.repo.GitLab -> "GitLab" to Color(0xFFE24329)
-        is com.monsivamon.android_oss_tracker.repo.FDroid -> "F-Droid" to Color(0xFF1976D2)
-        else -> "" to Color.Transparent
+    val (providerLabel, providerColor) = when (metaData.repo.providerName) {
+        "GitHub"   -> "GitHub"   to Color(0xFF24292F)
+        "GitLab"   -> "GitLab"   to Color(0xFFE24329)
+        "Codeberg" -> "Codeberg" to Color(0xFF2185D0)
+        "F-Droid"  -> "F-Droid"  to Color(0xFF1976D2)
+        "Direct"   -> "Direct"   to Color(0xFF607D8B)
+        else       -> metaData.repo.providerName to Color(0xFF757575)
     }
 
     ElevatedCard(
@@ -81,7 +75,6 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(16.dp)) {
             Column(modifier = Modifier.weight(1f)) {
 
-                // Repository name with provider badge
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         metaData.appName, style = MaterialTheme.typography.titleLarge,
@@ -102,7 +95,6 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Stable release section
                 stable?.let { s ->
                     Text("Stable Release", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -127,7 +119,6 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Pre-release section
                 pre?.let { p ->
                     Text("Pre-release", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold)
@@ -165,13 +156,6 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     }
 }
 
-/**
- * Opens [url] in the default web browser.
- *
- * Uses [Intent.ACTION_VIEW] with the [Intent.FLAG_ACTIVITY_NEW_TASK] flag
- * to avoid crashes when the browser process is not already running in the
- * background.
- */
 private fun openInBrowser(context: Context, url: String) {
     if (url.isNotBlank()) {
         try {
@@ -180,15 +164,6 @@ private fun openInBrowser(context: Context, url: String) {
     }
 }
 
-/**
- * Screen that allows the user to enter a repository URL, validate it against
- * the provider's API, and optionally add it to the tracked list.
- *
- * @param onNewTrackerAdded Called after a repository has been added
- *     successfully so the parent can dismiss a temporary tab.
- * @param onNavigateToApps  Called when the user presses the back arrow to
- *     return to the main apps tab.
- */
 @Composable
 fun NewTrackerScreen(
     onNewTrackerAdded: (() -> Unit)? = null,
@@ -197,12 +172,16 @@ fun NewTrackerScreen(
     val ctx = LocalContext.current
     val sharedPrefs = remember { ctx.getSharedPreferences(PersistentState.STATE_FILENAME, Context.MODE_PRIVATE) }
     val focus = LocalFocusManager.current
+
     val url = remember { mutableStateOf("") }
+    val customNameInput = remember { mutableStateOf("") }
     val tested = remember { mutableStateOf(false) }
+    val finalTestUrl = remember { mutableStateOf("") }
+
+    val isDirectLink = url.value.contains(".apk", ignoreCase = true)
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
 
-        // Header row with back navigation and centred title
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -235,9 +214,12 @@ fun NewTrackerScreen(
 
         OutlinedTextField(
             value = url.value,
-            onValueChange = { url.value = it.trim(); tested.value = false },
+            onValueChange = {
+                url.value = it.trim()
+                tested.value = false
+            },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Project Repository URL") },
+            label = { Text("Repository or APK URL") },
             placeholder = { Text("https://github.com/monsivamon/OSS-Tracker-RE") },
             shape = RoundedCornerShape(12.dp),
             keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done, keyboardType = KeyboardType.Uri),
@@ -245,22 +227,42 @@ fun NewTrackerScreen(
             singleLine = true,
             trailingIcon = {
                 if (url.value.isNotEmpty()) {
-                    IconButton(onClick = { url.value = ""; tested.value = false; focus.clearFocus() }) {
+                    IconButton(onClick = {
+                        url.value = ""
+                        customNameInput.value = ""
+                        tested.value = false
+                        focus.clearFocus()
+                    }) {
                         Icon(Icons.Default.Close, "Clear text")
                     }
                 }
             }
         )
 
+        if (isDirectLink) {
+            OutlinedTextField(
+                value = customNameInput.value,
+                onValueChange = {
+                    customNameInput.value = it
+                    tested.value = false
+                },
+                label = { Text("App Name (Optional)") },
+                placeholder = { Text("e.g. Antutu Benchmark") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+        }
+
         Spacer(Modifier.height(16.dp))
 
-        if (tested.value) {
+        if (tested.value && finalTestUrl.value.isNotEmpty()) {
             TrackerPreview(
-                repoUrl = url.value,
+                repoUrl = finalTestUrl.value,
                 onAdd = { repo, name ->
                     PersistentState.addTracker(sharedPrefs, repo)
                     Toast.makeText(ctx, "Added $name to your trackers", Toast.LENGTH_LONG).show()
                     url.value = ""
+                    customNameInput.value = ""
                     tested.value = false
                     onNewTrackerAdded?.invoke()
                 }
@@ -270,7 +272,17 @@ fun NewTrackerScreen(
         Spacer(Modifier.weight(1f))
 
         Button(
-            onClick = { if (url.value.isNotBlank()) { tested.value = true; focus.clearFocus() } },
+            onClick = {
+                if (url.value.isNotBlank()) {
+                    finalTestUrl.value = if (isDirectLink && customNameInput.value.isNotBlank()) {
+                        "${url.value}?name=${Uri.encode(customNameInput.value)}"
+                    } else {
+                        url.value
+                    }
+                    tested.value = true
+                    focus.clearFocus()
+                }
+            },
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp).height(56.dp),
             shape = RoundedCornerShape(12.dp)
         ) { Text("Test Repository", style = MaterialTheme.typography.titleMedium) }

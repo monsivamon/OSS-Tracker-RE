@@ -49,7 +49,7 @@ fun AboutAppDialog() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Track and download the latest APKs from open‑source projects on GitHub, GitLab and F-Droid.",
+                    Text("Track and download the latest APKs from GitHub, GitLab, Codeberg & F‑Droid.",
                         textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface)
 
