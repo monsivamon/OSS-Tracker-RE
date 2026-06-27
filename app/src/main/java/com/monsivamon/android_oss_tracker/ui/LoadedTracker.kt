@@ -59,11 +59,14 @@ fun LoadedTracker(metaData: RepoMetaData) {
 
     val installAfterDownload = AppSettings.installAfterDownload
     val provider = metaData.repo.providerName
+
     val (providerLabel, providerColor) = when (provider) {
-        "GitHub" -> "GitHub" to Color(0xFF24292F)
-        "GitLab" -> "GitLab" to Color(0xFFE24329)
-        "F-Droid" -> "F-Droid" to Color(0xFF1976D2)
-        else -> "" to Color.Transparent
+        "GitHub"   -> "GitHub"   to Color(0xFF24292F)
+        "GitLab"   -> "GitLab"   to Color(0xFFE24329)
+        "Codeberg" -> "Codeberg" to Color(0xFF2185D0)
+        "F-Droid"  -> "F-Droid"  to Color(0xFF1976D2)
+        "Direct"   -> "Direct"   to Color(0xFF607D8B)
+        else       -> "" to Color.Transparent
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -180,7 +183,7 @@ private fun ReleaseSection(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
         border = cardBorder,
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat look
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column {
             Row(

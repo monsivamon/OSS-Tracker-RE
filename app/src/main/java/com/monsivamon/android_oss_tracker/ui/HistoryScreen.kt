@@ -34,50 +34,139 @@ fun HistoryScreen() {
     val history = remember { DownloadHistoryManager.getHistory(ctx) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("Download History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp))
+        Text(
+            "Download History",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+        )
 
-        if (history.isEmpty()) Text("No downloads recorded yet.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 32.dp))
-        else LazyColumn { items(history.sortedByDescending { it.timestampMillis }) { HistoryItem(it) } }
+        if (history.isEmpty()) {
+            Text(
+                "No downloads recorded yet.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp)
+            )
+        } else {
+            LazyColumn {
+                items(history.sortedByDescending { it.timestampMillis }) { entry ->
+                    HistoryItem(entry)
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun HistoryItem(entry: com.monsivamon.android_oss_tracker.util.DownloadHistoryEntry) {
     val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
+
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(Modifier.size(10.dp), color = if (entry.success) Color(0xFF4CAF50) else Color(0xFFF44336), shape = MaterialTheme.shapes.extraLarge) {}
+            Surface(
+                Modifier.size(10.dp),
+                color = if (entry.success) Color(0xFF4CAF50) else Color(0xFFF44336),
+                shape = MaterialTheme.shapes.extraLarge
+            ) {}
             Spacer(Modifier.width(8.dp))
-            Text(entry.assetName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-            Surface(color = if (entry.success) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.small) {
-                Text(if (entry.success) "Done" else "Failed", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            Text(
+                entry.assetName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Surface(
+                color = if (entry.success) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text(
+                    if (entry.success) "Done" else "Failed",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
             }
         }
         if (!entry.success && entry.errorType.isNotBlank()) {
-            val err = try { ErrorType.valueOf(entry.errorType) } catch (_: Exception) { ErrorType.UNKNOWN }
-            Text(err.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 18.dp))
+            val err = try {
+                ErrorType.valueOf(entry.errorType)
+            } catch (_: Exception) {
+                ErrorType.UNKNOWN
+            }
+            Text(
+                err.description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(start = 18.dp)
+            )
         }
         Spacer(Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Provider badge
             if (entry.provider.isNotBlank()) {
                 val (pl, pc) = when (entry.provider) {
-                    "GitHub" -> "GitHub" to Color(0xFF24292F);
-                    "GitLab" -> "GitLab" to Color(0xFFE24329);
-                    "F-Droid" -> "F-Droid" to Color(0xFF1976D2);
-                    else -> entry.provider to Color.Gray
+                    "GitHub"   -> "GitHub"   to Color(0xFF24292F)
+                    "GitLab"   -> "GitLab"   to Color(0xFFE24329)
+                    "Codeberg" -> "Codeberg" to Color(0xFF2185D0)
+                    "F-Droid"  -> "F-Droid"  to Color(0xFF1976D2)
+                    "Direct"   -> "Direct"   to Color(0xFF607D8B)
+                    else       -> entry.provider to Color.Gray
                 }
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(pc).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) { Text(pl, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold) }
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(pc)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        pl,
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
                 Spacer(Modifier.width(4.dp))
             }
-            Text(entry.repoName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (entry.version.isNotBlank()) { Spacer(Modifier.width(4.dp)); Text(entry.version, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text(
+                entry.repoName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (entry.version.isNotBlank()) {
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    entry.version,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Spacer(Modifier.width(6.dp))
-            Surface(color = if (entry.releaseType == "Pre-release") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
-                Text(entry.releaseType, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+            Surface(
+                color = if (entry.releaseType == "Pre-release")
+                    MaterialTheme.colorScheme.tertiaryContainer
+                else
+                    MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text(
+                    entry.releaseType,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                )
             }
         }
-        Text(fmt.format(Date(entry.timestampMillis)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        Text(
+            fmt.format(Date(entry.timestampMillis)),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
         HorizontalDivider(Modifier.padding(top = 4.dp))
     }
 }

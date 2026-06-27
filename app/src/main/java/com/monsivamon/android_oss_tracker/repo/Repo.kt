@@ -44,7 +44,7 @@ data class AssetInfo(
  * @property date Release publication date.
  * @property assets Downloadable assets included in this release.
  * @property isPreRelease Whether this release is a pre-release, as indicated by the
- *           API or determined heuristically.
+ * API or determined heuristically.
  */
 data class LatestVersionData(
     val version: String,
@@ -86,8 +86,6 @@ data class RepoMetaData(
     /**
      * Fetches all releases from the provider, separates stable from pre-release,
      * and updates [latestRelease] and [latestPreRelease] accordingly.
-     *
-     * Pre-releases are excluded when [AppSettings.trackPreReleases] is `false`.
      */
     fun refreshNetwork() {
         state.value = MetaDataState.Loading
@@ -99,8 +97,6 @@ data class RepoMetaData(
                 is Either.Left -> {
                     val all = result.value
 
-                    // Separate releases using the explicit isPreRelease flag first,
-                    // falling back to a heuristic string check if the flag is not set
                     val stable = all.filter { !it.isPreRelease && !isPreReleaseString(it.version) }
                     val pre    = all.filter { it.isPreRelease || isPreReleaseString(it.version) }
 
@@ -116,10 +112,6 @@ data class RepoMetaData(
         }
     }
 
-    /**
-     * Returns `true` if the version string contains keywords commonly associated
-     * with pre-release identifiers (e.g. `dev`, `alpha`, `beta`, `rc`, `pre`).
-     */
     private fun isPreReleaseString(version: String): Boolean {
         val v = version.lowercase()
         return listOf("dev", "alpha", "beta", "rc", "pre").any { v.contains(it) }
@@ -127,10 +119,9 @@ data class RepoMetaData(
 }
 
 /**
- * Defines the contract for a repository hosting provider (e.g. GitHub, GitLab, F-Droid).
+ * Defines the contract for a repository hosting provider.
  */
 interface Repo {
-    /** Human-readable name of the hosting service, e.g. “GitHub”. */
     val providerName: String
 
     fun getOrgName(repoUrl: String): String
@@ -151,10 +142,16 @@ interface Repo {
             return when {
                 host.contains("github.com") -> GitHub()
                 host.contains("gitlab")     -> GitLab()
-                host.contains("f-droid.org") -> FDroid() // F-Droid provider
+                host.contains("f-droid.org") -> FDroid()
+                host.contains("codeberg.org") -> Codeberg()
+
+                // --- Direct APK Link ---
+                repoUrl.contains(".apk", ignoreCase = true) -> Direct()
+
+                // --- Fallback for unsupported URLs ---
                 else -> {
-                    println("[Repo.Helper] Unknown host '$host', defaulting to GitHub")
-                    GitHub()
+                    println("[Repo.Helper] Unknown host '$host', defaulting to UnknownRepo")
+                    UnknownRepo()
                 }
             }
         }
@@ -175,16 +172,9 @@ abstract class CommonRepo : Repo {
 
     private val versionPattern = Regex("v?([0-9]+\\S*)")
 
-    /**
-     * Strips an optional leading “v” and returns the first version-like substring.
-     */
     fun cleanVersionName(raw: String): String? =
         versionPattern.find(raw)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
-    /**
-     * Compares two cleaned version strings segment by segment.
-     * Numeric segments are compared numerically, others lexicographically.
-     */
     private fun compareVersions(a: String, b: String): Int {
         val partsA = a.split(".", "-")
         val partsB = b.split(".", "-")
@@ -264,5 +254,22 @@ abstract class CommonRepo : Repo {
             }
         }
         deferred.awaitAll().firstOrNull { it != null } ?: ""
+    }
+}
+
+/**
+ * Fallback repository class for unsupported or malformed URLs.
+ */
+class UnknownRepo : Repo {
+    override val providerName: String = "Unknown"
+    override fun getOrgName(repoUrl: String): String = ""
+    override fun getApplicationName(repoUrl: String): String = "Unsupported App"
+    override fun getIconUrl(repoUrl: String, branch: String, androidRoot: String): String = ""
+    override fun getUrlOfRawFile(org: String, app: String, branch: String, filepath: String): String = ""
+    override suspend fun fetchBranchName(org: String, app: String, requestQueue: RequestQueue): Either<String, Error> = Either.Left("main")
+    override suspend fun tryDetermineAndroidRoot(org: String, app: String, branch: String, requestQueue: RequestQueue): String = ""
+
+    override suspend fun fetchReleases(org: String, app: String, requestQueue: RequestQueue): Either<List<LatestVersionData>, Error> {
+        return Either.Right(Error("Unsupported repository URL. Please use a valid source or a Direct APK link."))
     }
 }

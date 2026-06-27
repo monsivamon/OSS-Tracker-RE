@@ -3,7 +3,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/monsivamon/OSS-Tracker-RE)](https://github.com/monsivamon/OSS-Tracker-RE/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A lightweight Android app that **monitors GitHub, GitLab, and F‑Droid repositories** for the latest APK releases, **downloads them in the background**, and lets you **install them with a single tap**. No browser, no file manager — everything happens right inside the app.
+A lightweight Android app that **monitors GitHub, GitLab, Codeberg, and F‑Droid repositories** (as well as **direct APK links**) for the latest APK releases, **downloads them in the background**, and lets you **install them with a single tap**. No browser, no file manager — everything happens right inside the app.
 
 This project started as a fork of [jroddev/android-oss-release-tracker](https://github.com/jroddev/android-oss-release-tracker) and has since been heavily re‑designed and extended.
 
@@ -27,6 +27,9 @@ Choose from **16 pastel gradient palettes** in Settings to personalize the app's
 
 ### 📦 Fast download engine
 APKs are fetched by a dedicated foreground service. **Real‑time progress** is displayed (file name, percentage, and a progress bar). You can **pause, resume, or cancel** downloads whenever you want.
+
+### 🔗 Direct APK Link
+Paste any direct APK download URL, give it a custom name, and track it just like a regular repository. Perfect for apps that don't host their releases on a supported platform.
 
 ### ⚡ One‑tap install — or download only
 When a download completes, a **"Tap to install"** button appears inside the repository card. Prefer to install manually? Switch to **Download Only** mode in Settings — APKs land straight in your device's Downloads folder.
@@ -64,7 +67,9 @@ One button erases all application data, restarts the app, and returns it to a fa
 
 ## 🚀 Usage
 
-1. **Add a repository** – Tap the **+** icon on the Apps screen, enter a GitHub, GitLab, or F‑Droid URL, and tap **Test Repository**. (You can re‑enable the dedicated New tab in Settings → Developer Options if you prefer.)
+1. **Add a repository or direct APK link** – Tap the **+** icon on the Apps screen, enter a GitHub, GitLab, Codeberg, or F‑Droid URL (or a direct APK download link), and tap **Test Repository**.  
+   - For a **direct APK link**, you can optionally provide a custom display name before testing.  
+   (You can re‑enable the dedicated New tab in Settings → Developer Options if you prefer.)
 2. **Start tracking** – Tap the **+** icon on the preview card to add it to your list.
 3. **Configure your token (recommended)** – Go to **Settings → API Configuration** and paste a GitHub Personal Access Token to avoid rate limits.
 4. **Download** – On the **Apps** tab, tap **Download** on any asset. Progress is shown in real time — pause or resume as needed.
