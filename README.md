@@ -11,10 +11,10 @@ This project started as a fork of [jroddev/android-oss-release-tracker](https://
 
 <p align="center">
   <img src="screenshots/Apps_v0.2.4.png"      alt="Apps"          width="19%" />
-  <img src="screenshots/New_v0.2.4.png"        alt="Add Tracker"   width="19%" />
+  <img src="screenshots/New_v0.2.7.png"        alt="Add Tracker"   width="19%" />
   <img src="screenshots/History_v0.2.4.png"        alt="History"   width="19%" />
   <img src="screenshots/Setting_v0.2.4_1.png"        alt="Setting_1"   width="19%" />
-  <img src="screenshots/Setting_v0.2.4_2.png"    alt="Settings_2"      width="19%" />
+  <img src="screenshots/Setting_v0.2.7_2.png"    alt="Settings_2"      width="19%" />
 </p>
 
 ## ✨ Features
@@ -30,6 +30,9 @@ APKs are fetched by a dedicated foreground service. **Real‑time progress** is 
 
 ### 🔗 Direct APK Link
 Paste any direct APK download URL, give it a custom name, and track it just like a regular repository. Perfect for apps that don't host their releases on a supported platform.
+
+### ✏️ Custom display names
+Give every repository or APK link a friendly name — **both when adding and after tracking**. The original URL stays untouched, and the name updates instantly across the app.
 
 ### ⚡ One‑tap install — or download only
 When a download completes, a **"Tap to install"** button appears inside the repository card. Prefer to install manually? Switch to **Download Only** mode in Settings — APKs land straight in your device's Downloads folder.
@@ -52,11 +55,11 @@ Instantly search through your tracked repositories from the Apps screen. A clear
 ### 🌓 Theme support
 Choose between **Light**, **Dark**, or **System** theme via a segmented control. Your preference is saved automatically.
 
-### 📂 Import / Export
-Back up or migrate your list of tracked repositories as a plain text file. One tap to export, one tap to import a text file with one repository URL per line.
+### 📂 Full backup & restore
+Export **everything** — repositories (with custom names and order), your GitHub token, and all app settings — into a single CSV file. Restore it later to bring back your entire setup in one shot.
 
 ### 📋 Download history
-The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab / F‑Droid).  
+The **History** tab records every download — successful or failed — with version numbers, release types (Stable / Pre‑release), detailed error reasons, and source platform badges (GitHub / GitLab / Codeberg / F‑Droid / Direct).  
 **Note:** The History tab is hidden by default. Enable it in **Settings → Developer Options** to see your download records.
 
 ### 🛠️ Developer Options
@@ -68,7 +71,7 @@ One button erases all application data, restarts the app, and returns it to a fa
 ## 🚀 Usage
 
 1. **Add a repository or direct APK link** – Tap the **+** icon on the Apps screen, enter a GitHub, GitLab, Codeberg, or F‑Droid URL (or a direct APK download link), and tap **Test Repository**.  
-   - For a **direct APK link**, you can optionally provide a custom display name before testing.  
+   - You can **optionally set a custom display name** before testing — and change it later from the card.  
    (You can re‑enable the dedicated New tab in Settings → Developer Options if you prefer.)
 2. **Start tracking** – Tap the **+** icon on the preview card to add it to your list.
 3. **Configure your token (recommended)** – Go to **Settings → API Configuration** and paste a GitHub Personal Access Token to avoid rate limits.

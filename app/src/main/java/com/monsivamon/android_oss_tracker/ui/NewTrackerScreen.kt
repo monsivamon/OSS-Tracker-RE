@@ -32,15 +32,33 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.monsivamon.android_oss_tracker.OSSApp
 import com.monsivamon.android_oss_tracker.PersistentState
+import com.monsivamon.android_oss_tracker.repo.Direct
 import com.monsivamon.android_oss_tracker.repo.MetaDataState
 import com.monsivamon.android_oss_tracker.repo.RepoMetaData
 import com.monsivamon.android_oss_tracker.util.AppSettings
+import java.net.URL
 
+/**
+ * A preview card shown before the user adds a repository.
+ *
+ * @param repoUrl    The URL of the repository or direct APK link.
+ * @param customName An optional custom display name to show instead of the default.
+ * @param onAdd      Called with the canonical repository URL and current display name when the user confirms.
+ */
 @Composable
-fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
+fun TrackerPreview(
+    repoUrl: String,
+    customName: String? = null,
+    onAdd: (String, String) -> Unit
+) {
     val requestQueue = remember { OSSApp.requestQueue }
     val metaData = remember { RepoMetaData(repoUrl, requestQueue) }
     val ctx = LocalContext.current
+
+    // Immediately apply the custom name so the preview is up‑to‑date
+    LaunchedEffect(customName) {
+        metaData.customName = customName
+    }
 
     LaunchedEffect(repoUrl) { metaData.refreshNetwork() }
     val trackPreReleases = AppSettings.trackPreReleases
@@ -50,6 +68,17 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
     val pre    = metaData.latestPreRelease.value
     val isValid = remember { mutableStateOf(false) }
     if (!isValid.value && (stable != null || pre != null)) isValid.value = true
+
+    // Generate a user‑friendly error message when the add button is disabled
+    val errorMessage = when {
+        metaData.state.value == MetaDataState.Unsupported ->
+            "Unsupported URL. Make sure it is a GitHub, GitLab, Codeberg, F‑Droid repository, or a direct APK link."
+        metaData.state.value == MetaDataState.Errored && metaData.errors.isNotEmpty() ->
+            metaData.errors.first()
+        metaData.state.value == MetaDataState.Loaded && stable == null && pre == null ->
+            "No APK releases found in this repository."
+        else -> null
+    }
 
     val fallbackText = when (metaData.state.value) {
         MetaDataState.Unsupported -> "<unsupported>"
@@ -142,6 +171,17 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
                     }
                 }
 
+                // Show a specific error message when the add button is disabled
+                if (errorMessage != null && !isValid.value) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+
                 if (stable == null && pre == null && metaData.state.value == MetaDataState.Loaded) {
                     Text(fallbackText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -149,7 +189,25 @@ fun TrackerPreview(repoUrl: String, onAdd: (String, String) -> Unit) {
 
             FilledIconButton(
                 enabled = isValid.value,
-                onClick = { onAdd(repoUrl, metaData.appName) },
+                onClick = {
+                    // Compute the canonical repository URL to avoid duplicate entries
+                    val canonicalUrl = when {
+                        metaData.repo is Direct -> repoUrl
+                        metaData.repo.providerName == "F-Droid" -> {
+                            val pkg = metaData.repo.getApplicationName(repoUrl)
+                            "https://f-droid.org/packages/$pkg"
+                        }
+                        else -> {
+                            try {
+                                val host = URL(repoUrl).host
+                                "https://$host/${metaData.repo.getOrgName(repoUrl)}/${metaData.repo.getApplicationName(repoUrl)}"
+                            } catch (_: Exception) {
+                                repoUrl
+                            }
+                        }
+                    }
+                    onAdd(canonicalUrl, metaData.appName)
+                },
                 modifier = Modifier.padding(start = 16.dp).size(48.dp)
             ) { Icon(Icons.Default.Add, "Add Repository") }
         }
@@ -164,6 +222,15 @@ private fun openInBrowser(context: Context, url: String) {
     }
 }
 
+/**
+ * Screen for adding a new tracker.
+ *
+ * The user pastes a repository URL or direct APK link, optionally provides
+ * a custom display name, and taps "Test Repository" to see a preview.
+ * The custom name is saved via [PersistentState.setCustomName] when the
+ * tracker is added, and the preview updates in real time as the name is typed.
+ * Duplicate URLs are rejected based on the canonical form of the repository.
+ */
 @Composable
 fun NewTrackerScreen(
     onNewTrackerAdded: (() -> Unit)? = null,
@@ -177,8 +244,6 @@ fun NewTrackerScreen(
     val customNameInput = remember { mutableStateOf("") }
     val tested = remember { mutableStateOf(false) }
     val finalTestUrl = remember { mutableStateOf("") }
-
-    val isDirectLink = url.value.contains(".apk", ignoreCase = true)
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
 
@@ -216,7 +281,7 @@ fun NewTrackerScreen(
             value = url.value,
             onValueChange = {
                 url.value = it.trim()
-                tested.value = false
+                tested.value = false   // URL changed → reset preview
             },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Repository or APK URL") },
@@ -239,28 +304,39 @@ fun NewTrackerScreen(
             }
         )
 
-        if (isDirectLink) {
-            OutlinedTextField(
-                value = customNameInput.value,
-                onValueChange = {
-                    customNameInput.value = it
-                    tested.value = false
-                },
-                label = { Text("App Name (Optional)") },
-                placeholder = { Text("e.g. Antutu Benchmark") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            )
-        }
+        // Custom name field – always visible, editing does NOT hide the preview
+        OutlinedTextField(
+            value = customNameInput.value,
+            onValueChange = {
+                customNameInput.value = it
+                // Preview stays visible; name updates reactively via customName parameter
+            },
+            label = { Text("App Name (Optional)") },
+            placeholder = { Text("e.g. My App") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
 
         Spacer(Modifier.height(16.dp))
 
         if (tested.value && finalTestUrl.value.isNotEmpty()) {
             TrackerPreview(
                 repoUrl = finalTestUrl.value,
-                onAdd = { repo, name ->
-                    PersistentState.addTracker(sharedPrefs, repo)
-                    Toast.makeText(ctx, "Added $name to your trackers", Toast.LENGTH_LONG).show()
+                customName = customNameInput.value.ifBlank { null },
+                onAdd = { canonicalUrl, defaultName ->
+                    // Prevent duplicate URLs using synchronous check on the canonical URL
+                    if (PersistentState.isTracked(sharedPrefs, canonicalUrl)) {
+                        Toast.makeText(ctx, "This URL is already tracked.", Toast.LENGTH_SHORT).show()
+                        return@TrackerPreview
+                    }
+
+                    // Persist the custom name if the user provided one
+                    if (customNameInput.value.isNotBlank()) {
+                        PersistentState.setCustomName(ctx, canonicalUrl, customNameInput.value.trim())
+                    }
+                    PersistentState.addTracker(sharedPrefs, canonicalUrl)
+                    val displayName = customNameInput.value.ifBlank { defaultName }
+                    Toast.makeText(ctx, "Added $displayName to your trackers", Toast.LENGTH_LONG).show()
                     url.value = ""
                     customNameInput.value = ""
                     tested.value = false
@@ -274,11 +350,7 @@ fun NewTrackerScreen(
         Button(
             onClick = {
                 if (url.value.isNotBlank()) {
-                    finalTestUrl.value = if (isDirectLink && customNameInput.value.isNotBlank()) {
-                        "${url.value}?name=${Uri.encode(customNameInput.value)}"
-                    } else {
-                        url.value
-                    }
+                    finalTestUrl.value = url.value   // clean URL, without any custom name parameter
                     tested.value = true
                     focus.clearFocus()
                 }

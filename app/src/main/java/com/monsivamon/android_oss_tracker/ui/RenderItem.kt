@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.monsivamon.android_oss_tracker.OSSApp
+import com.monsivamon.android_oss_tracker.PersistentState
 import com.monsivamon.android_oss_tracker.repo.AppCache
 import com.monsivamon.android_oss_tracker.repo.MetaDataState
 import com.monsivamon.android_oss_tracker.repo.RepoMetaData
@@ -26,15 +27,6 @@ import com.monsivamon.android_oss_tracker.util.AppSettings
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager
 import com.monsivamon.android_oss_tracker.util.DownloadStateManager.DownloadStatus
 
-/**
- * Renders a single tracked repository as a card with action buttons.
- *
- * Displays repository metadata with a crossfade animation between loading,
- * loaded, error, and unsupported states. Provides controls to reorder the item,
- * refresh its information, cancel active downloads, and delete it from the list.
- * The card border adapts its color when the "Cloud White" background theme is
- * selected to maintain sufficient contrast.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RenderItem(
@@ -48,10 +40,18 @@ fun RenderItem(
     val context = LocalContext.current
     val requestQueue = remember { OSSApp.requestQueue }
     val metaData = remember(repoUrl) {
-        AppCache.cachedRepos.getOrPut(repoUrl) { RepoMetaData(repoUrl, requestQueue).apply { refreshNetwork() } }
+        AppCache.cachedRepos.getOrPut(repoUrl) {
+            RepoMetaData(repoUrl, requestQueue).apply { refreshNetwork() }
+        }
     }
 
-    // Use a blue border for the "Cloud White" theme, and a white border otherwise
+    LaunchedEffect(repoUrl) {
+        metaData.customName = PersistentState.getCustomName(context, repoUrl)
+    }
+
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editName by remember { mutableStateOf("") }
+
     val isCloudWhite = AppSettings.backgroundThemeIndex == 11
     val cardBorder = if (isCloudWhite) {
         BorderStroke(1.dp, Color(0xFF42A5F5).copy(alpha = 0.6f))
@@ -64,7 +64,7 @@ fun RenderItem(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = if (isCloudWhite) 0.2f else 0.15f)),
         border = cardBorder,
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), // Flat to avoid unnecessary depth
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         onClick = { }
     ) {
         Box(Modifier.fillMaxWidth()) {
@@ -76,22 +76,37 @@ fun RenderItem(
                     label = "StateTransition"
                 ) { state ->
                     when (state) {
-                        MetaDataState.Unsupported -> UnsupportedTracker(metaData)
-                        MetaDataState.Loading    -> LoadingTracker(metaData)
-                        MetaDataState.Errored    -> ErroredTracker(metaData)
-                        MetaDataState.Loaded     -> LoadedTracker(metaData)
+                        MetaDataState.Unsupported -> UnsupportedTracker(
+                            metaData,
+                            onDelete = { onDelete(metaData.appName, metaData.repoUrl) }
+                        )
+                        MetaDataState.Loading -> LoadingTracker(
+                            metaData,
+                            onDelete = { onDelete(metaData.appName, metaData.repoUrl) }
+                        )
+                        MetaDataState.Errored -> ErroredTracker(
+                            metaData,
+                            onDelete = { onDelete(metaData.appName, metaData.repoUrl) }
+                        )
+                        MetaDataState.Loaded -> LoadedTracker(
+                            metaData,
+                            onDelete = { onDelete(metaData.appName, metaData.repoUrl) }
+                        )
                     }
                 }
             }
 
-            Column(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Right‑side column (without delete)
+            Column(
+                Modifier.align(Alignment.TopEnd).padding(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 IconButton(onClick = { onMoveUp(repoUrl) }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.ArrowUpward, "Move up", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
                 IconButton(onClick = { onMoveDown(repoUrl) }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.ArrowDownward, "Move down", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
-                // Cancel any active downloads for this repository's assets, then refresh metadata
                 IconButton(onClick = {
                     val all = metaData.latestRelease.value?.assets.orEmpty() + metaData.latestPreRelease.value?.assets.orEmpty()
                     all.forEach { asset ->
@@ -116,10 +131,45 @@ fun RenderItem(
                         Icon(Icons.Default.Refresh, "Refresh", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                     }
                 }
-                IconButton(onClick = { onDelete(metaData.appName, metaData.repoUrl) }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
+                IconButton(onClick = {
+                    editName = metaData.appName
+                    showEditDialog = true
+                }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Edit, "Edit name", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
             }
         }
+    }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit display name") },
+            text = {
+                OutlinedTextField(
+                    value = editName,
+                    onValueChange = { editName = it },
+                    label = { Text("New name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newName = editName.trim()
+                    if (newName.isNotEmpty()) {
+                        PersistentState.setCustomName(context, repoUrl, newName)
+                        metaData.customName = newName
+                    } else {
+                        PersistentState.setCustomName(context, repoUrl, "")
+                        metaData.customName = null
+                    }
+                    showEditDialog = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }

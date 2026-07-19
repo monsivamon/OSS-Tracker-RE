@@ -5,18 +5,27 @@ import com.android.volley.RequestQueue
 
 /**
  * Handles direct APK downloads.
- * Supports appending "?name=CustomAppName" to the URL to set a custom display name.
+ *
+ * The repository URL is the direct link to the APK file.
+ * A custom display name can be assigned via [PersistentState.setCustomName],
+ * otherwise the filename (without extension) is used.
  */
 class Direct : Repo {
     override val providerName: String = "Direct"
 
-    // Store the complete original URL (including ?name=) in orgName to prevent data loss.
+    /**
+     * The "org name" is the complete URL so that [fetchReleases]
+     * can extract the actual download URL by removing query parameters.
+     */
     override fun getOrgName(repoUrl: String): String = repoUrl
 
-    // Extract the custom name from the query parameter, or fallback to the file name.
+    /**
+     * Returns the application name derived from the APK file name.
+     * Any query string is stripped; only the last path segment is used.
+     */
     override fun getApplicationName(repoUrl: String): String {
-        val customName = repoUrl.substringAfter("?name=", "")
-        return customName.ifEmpty { repoUrl.substringBefore("?").substringAfterLast("/").removeSuffix(".apk") }
+        val path = repoUrl.substringBefore("?").substringAfterLast("/")
+        return path.removeSuffix(".apk")
     }
 
     override fun getIconUrl(repoUrl: String, branch: String, androidRoot: String): String = ""
@@ -25,13 +34,12 @@ class Direct : Repo {
     override suspend fun tryDetermineAndroidRoot(org: String, app: String, branch: String, requestQueue: RequestQueue): String = ""
 
     override suspend fun fetchReleases(org: String, app: String, requestQueue: RequestQueue): Either<List<LatestVersionData>, Error> {
-        // 'org' holds the complete original URL. We strip the query to get the actual download URL.
+        // 'org' holds the complete original URL. Strip the query to get the actual download URL.
         val downloadUrl = org.substringBefore("?")
         val fileName = downloadUrl.substringAfterLast("/")
 
         val assets = listOf(AssetInfo(fileName, downloadUrl, 0L))
 
-        // Set 'url' to an empty string ("") to prevent browser redirection when the badge is clicked.
         return Either.Left(listOf(LatestVersionData("latest", "", "Direct Link", assets, false)))
     }
 }

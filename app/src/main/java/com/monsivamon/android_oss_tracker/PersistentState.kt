@@ -2,21 +2,14 @@ package com.monsivamon.android_oss_tracker
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONObject
 
-/**
- * PersistentState manages a list of tracked repository URLs that survives
- * process restarts.  The list is stored both as a keyed set and as an
- * explicit order so that drag‑and‑drop reordering can be preserved.
- *
- * When the stored list is empty — for example after a factory reset or on
- * first launch — a default set of repositories is automatically seeded.
- */
 object PersistentState {
     const val STATE_FILENAME = "app_trackers"
     private const val KEY_REPO_URLS = "repo_urls"
     private const val KEY_ORDER = "repo_order"
+    private const val KEY_CUSTOM_NAMES = "custom_names"
 
-    /** Default repositories that are automatically added when the list is empty. */
     private val DEFAULT_REPOS = listOf("https://github.com/monsivamon/OSS-Tracker-RE")
 
     fun initializeDefaultTrackers(prefs: SharedPreferences) {
@@ -34,6 +27,11 @@ object PersistentState {
         return urls.sortedByDescending { it.lowercase() }
     }
 
+    fun isTracked(prefs: SharedPreferences, repoUrl: String): Boolean {
+        val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet()) ?: emptySet()
+        return repoUrl in urls
+    }
+
     fun addTracker(prefs: SharedPreferences, repoUrl: String) {
         val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet())?.toMutableSet() ?: mutableSetOf()
         if (urls.add(repoUrl)) {
@@ -47,7 +45,10 @@ object PersistentState {
         val urls = prefs.getStringSet(KEY_REPO_URLS, emptySet())?.toMutableSet() ?: mutableSetOf()
         if (urls.remove(repoUrl)) {
             prefs.edit().putStringSet(KEY_REPO_URLS, urls).apply()
-            val current = getSavedTrackers(prefs).toMutableList(); current.remove(repoUrl); saveOrder(prefs, current)
+            val current = getSavedTrackers(prefs).toMutableList()
+            current.remove(repoUrl)
+            saveOrder(prefs, current)
+            removeCustomName(prefs, repoUrl)
         }
     }
 
@@ -65,10 +66,32 @@ object PersistentState {
     }
 
     fun removeAllTrackers(prefs: SharedPreferences) {
-        prefs.edit().remove(KEY_REPO_URLS).remove(KEY_ORDER).apply()
+        prefs.edit().remove(KEY_REPO_URLS).remove(KEY_ORDER).remove(KEY_CUSTOM_NAMES).apply()
     }
 
     fun saveOrder(prefs: SharedPreferences, orderedUrls: List<String>) {
         prefs.edit().putString(KEY_ORDER, orderedUrls.joinToString(",")).apply()
+    }
+
+    fun setCustomName(context: Context, repoUrl: String, name: String) {
+        val prefs = context.getSharedPreferences(STATE_FILENAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_CUSTOM_NAMES, "{}") ?: "{}"
+        val map = JSONObject(json)
+        map.put(repoUrl, name)
+        prefs.edit().putString(KEY_CUSTOM_NAMES, map.toString()).apply()
+    }
+
+    fun getCustomName(context: Context, repoUrl: String): String? {
+        val prefs = context.getSharedPreferences(STATE_FILENAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_CUSTOM_NAMES, "{}") ?: "{}"
+        val map = JSONObject(json)
+        return if (map.has(repoUrl)) map.getString(repoUrl) else null
+    }
+
+    private fun removeCustomName(prefs: SharedPreferences, repoUrl: String) {
+        val json = prefs.getString(KEY_CUSTOM_NAMES, "{}") ?: "{}"
+        val map = JSONObject(json)
+        map.remove(repoUrl)
+        prefs.edit().putString(KEY_CUSTOM_NAMES, map.toString()).apply()
     }
 }

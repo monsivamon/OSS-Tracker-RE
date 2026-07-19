@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
@@ -43,11 +44,14 @@ import java.io.File
  * Displays the detailed information of a tracked repository when its metadata
  * has been successfully loaded.
  *
- * Shows the app name, provider badge, stable release, and pre‑release sections.
- * Automatically re‑fetches metadata when the "track pre‑releases" setting changes.
+ * @param metaData the repository metadata to display.
+ * @param onDelete callback invoked when the user taps the delete button.
  */
 @Composable
-fun LoadedTracker(metaData: RepoMetaData) {
+fun LoadedTracker(
+    metaData: RepoMetaData,
+    onDelete: () -> Unit = {}
+) {
     val ctx = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val allDownloadStates by DownloadStateManager.states.collectAsState()
@@ -70,6 +74,7 @@ fun LoadedTracker(metaData: RepoMetaData) {
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        // Header row: app name, provider badge, and delete button
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = metaData.appName,
@@ -82,10 +87,23 @@ fun LoadedTracker(metaData: RepoMetaData) {
                 Spacer(modifier = Modifier.width(8.dp))
                 ProviderBadge(providerLabel, providerColor)
             }
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Stable release section
         metaData.latestRelease.value?.let { release ->
             ReleaseSection(
                 label = "Stable Release",
@@ -105,6 +123,7 @@ fun LoadedTracker(metaData: RepoMetaData) {
             )
         }
 
+        // Pre‑release section
         metaData.latestPreRelease.value?.let { pre ->
             ReleaseSection(
                 label = "Pre‑release",
@@ -127,7 +146,7 @@ fun LoadedTracker(metaData: RepoMetaData) {
 }
 
 /**
- * A small colored badge displaying the name of the repository provider (e.g., GitHub, GitLab).
+ * A small colored badge displaying the name of the repository provider.
  */
 @Composable
 private fun ProviderBadge(label: String, color: Color) {
@@ -149,10 +168,6 @@ private fun ProviderBadge(label: String, color: Color) {
 
 /**
  * An expandable card that displays the details of a single release (stable or pre‑release).
- *
- * Shows the version number (tappable to open the release page), release date,
- * and a list of downloadable assets. The card border adapts to the selected
- * background theme to maintain visual contrast.
  */
 @Composable
 private fun ReleaseSection(
@@ -170,7 +185,6 @@ private fun ReleaseSection(
     val ctx = LocalContext.current
     val expanded = remember { mutableStateOf(false) }
 
-    // Use a blue border for the Cloud White theme, white border otherwise
     val isCloudWhite = AppSettings.backgroundThemeIndex == 11
     val cardBorder = if (isCloudWhite) {
         BorderStroke(1.dp, Color(0xFF42A5F5).copy(alpha = 0.5f))
@@ -266,8 +280,7 @@ private fun ReleaseSection(
 
 /**
  * Renders the UI for a single downloadable asset, varying the controls and
- * progress indication based on its current [DownloadStatus] (idle, downloading,
- * paused, completed, or failed).
+ * progress indication based on its current [DownloadStatus].
  */
 @Composable
 private fun AssetDownloadRow(
@@ -391,8 +404,7 @@ private fun AssetDownloadRow(
 }
 
 /**
- * Starts downloading the specified asset by launching [ApkDownloadService]
- * as a foreground service.
+ * Starts downloading the specified asset by launching [ApkDownloadService] as a foreground service.
  */
 private fun startDownload(
     context: Context,

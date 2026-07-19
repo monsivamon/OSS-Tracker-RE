@@ -1,5 +1,13 @@
 package com.monsivamon.android_oss_tracker.repo
 
+import arrow.core.Either
+import com.android.volley.AuthFailureError
+import com.android.volley.NetworkError
+import com.android.volley.RequestQueue
+import com.android.volley.toolbox.JsonArrayRequest
+import com.android.volley.toolbox.JsonObjectRequest
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -7,16 +15,13 @@ import java.net.URLEncoder
 /**
  * GitLab API v4 implementation of [CommonRepo].
  *
- * Targets gitlab.com by default. For self‑hosted GitLab instances the base URL
- * must be adjusted.
+ * All API calls are made without authentication, because a GitHub token
+ * is not valid for GitLab instances and would cause 401 errors.
  */
 class GitLab : CommonRepo() {
 
     override val providerName = "GitLab"
 
-    /**
-     * Returns the URL-encoded project identifier `org%2Fapp`.
-     */
     private fun projectId(org: String, app: String): String =
         URLEncoder.encode("$org/$app", "utf-8")
 
@@ -44,16 +49,96 @@ class GitLab : CommonRepo() {
         return "https://gitlab.com/$org/$app/-/raw/$branch/$androidRoot/src/main/res/mipmap-mdpi/ic_launcher.png"
     }
 
-    /**
-     * Parses a JSON array of releases into a list of [LatestVersionData].
-     */
+    // ---------- Unauthenticated API calls ----------
+
+    override suspend fun fetchBranchName(
+        org: String, app: String, requestQueue: RequestQueue
+    ): Either<String, Error> {
+        val url = getRepoMetaDataUrl(org, app)
+        return suspendCoroutine { cont ->
+            val request = object : JsonObjectRequest(
+                Method.GET, url, null,
+                { response -> cont.resume(Either.Left(response.optString("default_branch", "main"))) },
+                { error ->
+                    val msg = when (error) {
+                        is AuthFailureError -> "Authentication error (401)."
+                        is NetworkError -> "Network error: ${error.message}"
+                        else -> "Error: ${error.message}"
+                    }
+                    cont.resume(Either.Right(Error(msg)))
+                }
+            ) {
+                override fun getHeaders(): MutableMap<String, String> = java.util.HashMap()
+            }
+            requestQueue.add(request)
+        }
+    }
+
+    override suspend fun fetchReleases(
+        org: String, app: String, requestQueue: RequestQueue
+    ): Either<List<LatestVersionData>, Error> {
+        val url = getReleasesUrl(org, app)
+        return suspendCoroutine { continuation ->
+            val request = object : JsonArrayRequest(
+                Method.GET, url, null,
+                { response ->
+                    try {
+                        val all = parseReleasesJsonArray(response)
+                        val sorted = all.sortedWith { a, b ->
+                            -compareVersions(a.version, b.version)
+                        }
+                        continuation.resume(Either.Left(sorted))
+                    } catch (e: Exception) {
+                        continuation.resume(
+                            Either.Right(Error("Failed to parse releases: ${e.message}"))
+                        )
+                    }
+                },
+                { error ->
+                    val message = when (error) {
+                        is AuthFailureError -> "Authentication error (401)."
+                        is NetworkError -> "Network error: ${error.message}"
+                        else -> "Error: ${error.message}"
+                    }
+                    continuation.resume(Either.Right(Error(message)))
+                }
+            ) {
+                override fun getHeaders(): MutableMap<String, String> = java.util.HashMap()
+            }
+            requestQueue.add(request)
+        }
+    }
+
+    // Version comparison duplicated from CommonRepo (private there)
+    private fun compareVersions(a: String, b: String): Int {
+        val partsA = a.split(".", "-")
+        val partsB = b.split(".", "-")
+        val maxLen = maxOf(partsA.size, partsB.size)
+        for (i in 0 until maxLen) {
+            val segA = partsA.getOrNull(i) ?: return -1
+            val segB = partsB.getOrNull(i) ?: return 1
+            val numA = segA.toIntOrNull()
+            val numB = segB.toIntOrNull()
+            when {
+                numA != null && numB != null -> {
+                    if (numA != numB) return numA.compareTo(numB)
+                }
+                numA != null -> return 1
+                numB != null -> return -1
+                else -> {
+                    val cmp = segA.compareTo(segB)
+                    if (cmp != 0) return cmp
+                }
+            }
+        }
+        return 0
+    }
+
+    // ---------- Parsing ----------
+
     override fun parseReleasesJsonArray(data: JSONArray): List<LatestVersionData> =
         (0 until data.length()).map { i -> parseReleaseEntry(data.getJSONObject(i)) }
 
-    /**
-     * Parses a single release JSON object, extracting the version, URL, date,
-     * and attached assets (links).
-     */
     private fun parseReleaseEntry(entry: JSONObject): LatestVersionData {
         val rawName = entry.optString("name").takeIf { it.isNotBlank() }
             ?: entry.optString("tag_name").takeIf { it.isNotBlank() }

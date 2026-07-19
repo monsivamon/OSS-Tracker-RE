@@ -70,7 +70,22 @@ data class RepoMetaData(
 ) {
     val repo: Repo = Repo.Helper.new(repoUrl)
     val orgName: String = repo.getOrgName(repoUrl)
-    val appName: String = repo.getApplicationName(repoUrl)
+
+    /** The original repository/application name returned by the provider. */
+    private val defaultAppName: String = repo.getApplicationName(repoUrl)
+
+    /**
+     * An optional custom display name that overrides [defaultAppName] in the UI.
+     * Set to null to use the default.
+     */
+    var customName: String? = null
+
+    /**
+     * The user‑visible name shown on cards and in previews.
+     * Returns [customName] if set, otherwise [defaultAppName].
+     */
+    val appName: String
+        get() = customName ?: defaultAppName
 
     val state = mutableStateOf(MetaDataState.Unsupported)
 
@@ -86,6 +101,9 @@ data class RepoMetaData(
     /**
      * Fetches all releases from the provider, separates stable from pre-release,
      * and updates [latestRelease] and [latestPreRelease] accordingly.
+     *
+     * The API call always uses the original repository name ([defaultAppName])
+     * so that a custom display name does not break the request.
      */
     fun refreshNetwork() {
         state.value = MetaDataState.Loading
@@ -93,7 +111,8 @@ data class RepoMetaData(
 
         refreshJob?.cancel()
         refreshJob = CoroutineScope(Dispatchers.Main).launch {
-            when (val result = repo.fetchReleases(orgName, appName, requestQueue)) {
+            // Use defaultAppName for the API; customName is only for display
+            when (val result = repo.fetchReleases(orgName, defaultAppName, requestQueue)) {
                 is Either.Left -> {
                     val all = result.value
 

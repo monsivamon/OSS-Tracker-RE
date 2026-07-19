@@ -66,8 +66,8 @@ private val THEME_OPTIONS = listOf(
  * Main settings screen composable.
  *
  * Displays sections for customizing the background theme, display mode,
- * tracking behavior, API configuration, repository list management,
- * and developer options. Scroll position is restored via [AppSettings].
+ * tracking behavior, API configuration, backup & restore, and developer options.
+ * Scroll position is restored via [AppSettings].
  */
 @Composable
 fun SettingsScreen(onNavigateToApps: () -> Unit = {}) {
@@ -185,8 +185,6 @@ private fun BackgroundThemeSection() {
             )
         )
 
-        // Wrap the dropdown in a custom MaterialTheme so its surface colors
-        // remain semi-transparent regardless of the global theme.
         MaterialTheme(
             colorScheme = MaterialTheme.colorScheme.copy(
                 surface = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
@@ -319,14 +317,17 @@ private fun ApiConfigurationSection() {
 }
 
 /**
- * Import/export controls for the tracked repository list and other utility buttons.
+ * Backup & Restore controls and other utility buttons.
  */
 @Composable
 private fun OtherManagersSection() {
-    SectionHeader("Repo List Manager")
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(modifier = Modifier.weight(1f)) { RepoListImporter() }
-        Box(modifier = Modifier.weight(1f)) { RepoListExporter() }
+    SectionHeader("Backup & Restore")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(modifier = Modifier.weight(1f)) { RepoListImporter() } // Restore button
+        Box(modifier = Modifier.weight(1f)) { RepoListExporter() } // Backup button
     }
 
     SectionDivider()
